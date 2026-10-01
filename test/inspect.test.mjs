@@ -108,3 +108,22 @@ test("versions compare the way the add-on manager compares them", () => {
   assert.equal(isCompatible("11.0", "9.0", "10.*"), false);
   assert.equal(isCompatible("11.0", "11.1", "12.*"), false);
 });
+
+test("versions compare like Gecko's ParseVP in its corners", () => {
+  // A "+" part is the next number's "pre".
+  assert.equal(compareVersions("1.0+", "1.1pre"), 0);
+  assert.equal(compareVersions("1.0+", "1.0"), 1);
+  assert.equal(compareVersions("1.0+", "1.0.5"), 1);
+  assert.equal(isCompatible("11.0", "9.0", "11.0+"), true);
+  // The text part ends at a digit, "+" or "-", and the number after it may
+  // carry a sign.
+  assert.equal(compareVersions("1.0a+1", "1.0a1"), 0);
+  assert.equal(compareVersions("1.0a-1", "1.0a"), -1);
+  assert.equal(compareVersions("1.0a1x", "1.0a1"), -1);
+  // Numbers outside int32 count as 0, and "*" is above every number.
+  assert.equal(compareVersions("1.99999999999", "1.0"), 0);
+  assert.equal(compareVersions("1.*", "1.999999999"), 1);
+  // Missing parts and empty parts are 0.
+  assert.equal(compareVersions("1.", "1.0.0"), 0);
+  assert.equal(compareVersions("1..2", "1.0.2"), 0);
+});
