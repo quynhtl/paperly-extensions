@@ -331,6 +331,12 @@ export function inspectXpi(buffer, { listing, config }) {
   const hosts = new Set();
   let dynamic = null;
   for (const name of zip.names) {
+    // A version with an error is refused whatever else is found, and the
+    // rest of its code would only cost time: up to 8 MB a file, in as many
+    // files as the archive holds.
+    if (failed) {
+      break;
+    }
     if (!SCANNED.test(name)) {
       continue;
     }
@@ -344,10 +350,8 @@ export function inspectXpi(buffer, { listing, config }) {
     try {
       text = zip.read(name).toString("utf8");
     } catch (e) {
-      // The version is refused either way, and an archive that breaks one
-      // limit would only cost time on the rest.
       error("unreadable", `${nameInMessage(name)} cannot be read: ${e.message}`, name);
-      break;
+      continue;
     }
     for (const pattern of REMOTE_CODE) {
       const m = pattern.exec(text);

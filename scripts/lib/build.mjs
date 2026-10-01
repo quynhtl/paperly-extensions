@@ -30,6 +30,15 @@ const MAX_ENTRY_BYTES = 256 * 1024;
  */
 const MAX_INDEX_BYTES = 8 * 1024 * 1024;
 
+/**
+ * How many releases past versionsKept one run looks at, to make up for ones
+ * that fail. Those that fail count too: each costs a download and a full
+ * check, and an extension that published a hundred failing ones would
+ * otherwise have every run check them all, until runs ran out of time and
+ * nothing was published.
+ */
+const SPARE_RELEASES = 5;
+
 const kb = (n) => `${Math.ceil(n / 1024)} KB`;
 const mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 
@@ -123,7 +132,9 @@ function discard(out, id) {
  *
  * `listings` is [{ file, listing }]. `candidates(listing)` resolves to that
  * extension's releases, newest first: [{ label, released, problem, load }],
- * where `load()` resolves to the .xpi's bytes.
+ * where `load()` resolves to the .xpi's bytes. `log(line)` is given each
+ * listing's id before it is built, so that a build stopped for taking too
+ * long shows which one it was on.
  *
  * One extension can never stop the build: whatever goes wrong with it is
  * written in the report, and it is left out. Otherwise one bad release would
@@ -143,6 +154,7 @@ export async function buildRegistry({
   out,
   signingKey,
   verifyPublisher = checkPublisherDomain,
+  log = () => {},
   now = new Date(),
 }) {
   rmSync(out, { recursive: true, force: true });
@@ -173,7 +185,8 @@ export async function buildRegistry({
 
     const accepted = [];
     let icon = null;
-    for (const release of releases) {
+    const examined = releases.slice(0, config.versionsKept + SPARE_RELEASES);
+    for (const release of examined) {
       if (accepted.length >= config.versionsKept) {
         break;
       }
@@ -232,7 +245,8 @@ export async function buildRegistry({
     accepted.sort((a, b) => compareVersions(b.version, a.version));
     entry.versions = accepted.map((v) => v.version);
     if (!accepted.length) {
-      entry.problems.push("No release passed the checks, so the extension is not listed.");
+      const among = releases.length > examined.length ? ` among the newest ${examined.length}, which are all a publish looks at` : "";
+      entry.problems.push(`No release passed the checks${among}, so the extension is not listed.`);
       return null;
     }
 
@@ -300,6 +314,7 @@ export async function buildRegistry({
       entry.problems.push("Delisted by its owner.");
       continue;
     }
+    log(`Building ${listing.id}`);
     try {
       const extension = await buildExtension(listing, entry);
       if (extension) {

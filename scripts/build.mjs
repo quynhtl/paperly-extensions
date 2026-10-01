@@ -136,6 +136,7 @@ try {
     candidates,
     out: values.out,
     signingKey,
+    log: (line) => console.log(line),
   }));
 } catch (e) {
   if (!e?.fatal) {

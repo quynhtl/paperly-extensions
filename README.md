@@ -131,7 +131,9 @@ Verified says who publishes an extension. It doesn't say the extension is safe.
 Publish a new GitHub release. The marketplace looks for new releases every few
 hours, checks them, and offers the new version to everyone who has the
 extension. Newest first, the last five passing versions are kept; releases
-marked as pre-releases, and drafts, are skipped.
+marked as pre-releases, and drafts, are skipped. Each publish looks at the
+ten newest releases at most, passing or failing: with more than five
+failing ones among them, fewer versions are kept.
 
 ## Delisting
 
