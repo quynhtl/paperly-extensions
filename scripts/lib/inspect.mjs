@@ -132,6 +132,33 @@ const URL_IN_STRING = /["'`](?:https?|wss?):\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi
 
 const ICON_TYPES = { png: "image/png", svg: "image/svg+xml", jpg: "image/jpeg", jpeg: "image/jpeg" };
 
+/**
+ * What makes an SVG more than a picture: scripts, event handlers, embedded
+ * HTML, and links anywhere but inside itself. Inside Paperly an icon is shown
+ * as an image, where none of it runs, but the marketplace serves the icon on
+ * its own web address too, and opened there it would run on that site.
+ */
+const SVG_UNSAFE = [
+  /<(?:[\w.-]+:)?script\b/i,
+  /\bon[a-z]+\s*=/i,
+  /<(?:[\w.-]+:)?foreignObject\b/i,
+  /javascript:/i,
+  /\bhref\s*=(?!\s*["']\s*#)/i,
+];
+
+const UTF8 = new TextDecoder("utf-8", { fatal: true });
+
+function unsafeSVG(data) {
+  let text;
+  try {
+    text = UTF8.decode(data);
+  } catch {
+    // Another encoding (UTF-16, say) would hide all of the above from the patterns.
+    return true;
+  }
+  return text.includes("\0") || SVG_UNSAFE.some((p) => p.test(text));
+}
+
 const MAX_VERSION_LENGTH = 64;
 
 function hostCovered(host, declared) {
@@ -348,7 +375,9 @@ export function inspectXpi(buffer, { listing, config }) {
     } catch {
       data = null;
     }
-    if (data) {
+    if (data && type === "image/svg+xml" && unsafeSVG(data)) {
+      notice("icon-unsafe", `The icon ${iconPath} holds scripts, event handlers, HTML or links, so the marketplace does not show it.`);
+    } else if (data) {
       result.icon = { path: iconPath, type, data };
     } else {
       notice("icon-missing", `The icon ${iconPath} is not in the .xpi, or is not a PNG, SVG or JPEG.`);

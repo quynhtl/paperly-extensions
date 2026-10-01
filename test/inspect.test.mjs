@@ -87,6 +87,32 @@ test("code too large to scan is refused without being read, and a broken archive
   assert.deepEqual(codes(inspectXpi(bytes, { listing: listing(), config }), "error"), ["unreadable"]);
 });
 
+test("an SVG icon that is more than a picture is not shown", () => {
+  const withIcon = (svg) =>
+    inspectXpi(xpi({ manifest: manifest({ icons: { 96: "icon.svg" } }), files: { "icon.svg": svg } }), {
+      listing: listing(),
+      config,
+    });
+  const unsafe = [
+    '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div/></foreignObject></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:x="http://www.w3.org/2000/svg"><x:script>alert(1)</x:script></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a xlink:href="https://evil.example/"><rect/></a></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><a href="javascript:alert(1)"><rect/></a></svg>',
+    Buffer.from("\ufeff<svg><script>alert(1)</script></svg>", "utf16le"),
+  ];
+  for (const svg of unsafe) {
+    const result = withIcon(svg);
+    assert.equal(result.ok, true);
+    assert.equal(result.icon, null, String(svg));
+    assert.ok(codes(result, "notice").includes("icon-unsafe"), String(svg));
+  }
+  const safe = withIcon('<svg xmlns="http://www.w3.org/2000/svg"><defs><path id="p" d="M0 0h9"/></defs><use href = "#p"/></svg>');
+  assert.equal(safe.icon.type, "image/svg+xml");
+  assert.deepEqual(safe.findings, []);
+});
+
 test("what the code uses is compared with what the listing declares", () => {
   const files = {
     "content/a.js": [
