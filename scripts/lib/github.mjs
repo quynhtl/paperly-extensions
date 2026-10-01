@@ -19,6 +19,24 @@ const PAGE = 100;
  */
 const GONE = new Set([404, 451]);
 
+/**
+ * Whether a 403's body is GitHub saying it has disabled the repository (for
+ * breaking its terms, say): "Repository access blocked", with a `block` that
+ * gives the reason. That is gone too. Taken for a failure, one disabled
+ * repository would stop every publish until a maintainer blocked its listing.
+ */
+function disabled(text) {
+  try {
+    const body = JSON.parse(text);
+    return (
+      Boolean(body?.block && typeof body.block === "object") ||
+      (typeof body?.message === "string" && /repository access blocked/i.test(body.message))
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** GitHub could not be asked. `fatal` tells the build to stop, not just to skip one extension. */
 export class GitHubError extends Error {
   fatal = true;
@@ -35,13 +53,14 @@ function headers(token) {
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** How long to wait before asking again, or null when asking again will not help. */
-async function retryDelay(response, attempt) {
-  const { status, headers: h } = response;
+/**
+ * How long to wait before asking again, or null when asking again will not
+ * help. `text` is the body of a 403, which says whether it is a rate limit.
+ */
+function retryDelay({ status, headers: h }, text, attempt) {
   let limited = status === 429 || status >= 500;
   if (status === 403) {
     // A 403 is worth waiting out only when it is a rate limit.
-    const text = await response.text().catch(() => "");
     limited = h.has("retry-after") || h.get("x-ratelimit-remaining") === "0" || /rate limit/i.test(text);
   }
   if (!limited) {
@@ -56,7 +75,10 @@ async function retryDelay(response, attempt) {
   return 1000 * 2 ** attempt;
 }
 
-/** A GET of the API that resolves to an answer: a 2xx, or a repository that is gone. */
+/**
+ * A GET of the API that resolves to an answer: the response, for a 2xx, or
+ * null for a repository that is gone.
+ */
 async function get(path, { token, fetch = globalThis.fetch, wait = pause }) {
   for (let attempt = 0; ; attempt++) {
     let response = null;
@@ -66,14 +88,20 @@ async function get(path, { token, fetch = globalThis.fetch, wait = pause }) {
     } catch (e) {
       why = `GitHub could not be reached (${e.message})`;
     }
-    if (response && (response.ok || GONE.has(response.status))) {
+    if (response?.ok) {
       return response;
     }
     let delay = 1000 * 2 ** attempt;
     if (response) {
+      const text = response.status === 403 ? await response.text().catch(() => "") : "";
+      if (!response.bodyUsed) {
+        await response.body?.cancel().catch(() => {});
+      }
+      if (GONE.has(response.status) || (response.status === 403 && disabled(text))) {
+        return null;
+      }
       why = `GitHub answered ${response.status}`;
-      delay = await retryDelay(response, attempt);
-      await response.body?.cancel().catch(() => {});
+      delay = retryDelay(response, text, attempt);
     }
     if (delay === null || !(delay <= MAX_WAIT_MS) || attempt >= RETRIES) {
       throw new GitHubError(`${why} for ${path}`);
@@ -100,21 +128,22 @@ function describe(repo, path) {
 
 /**
  * The public repository with this numeric id, as { id, fullName, owner:
- * { login, id, type } }, or null if there is none. The id stays with a
- * repository through renames and transfers and is never given to another, so
- * listings are tied to it rather than to a name someone else could register.
+ * { login, id, type } }, or null if there is none, or GitHub has disabled
+ * it. The id stays with a repository through renames and transfers and is
+ * never given to another, so listings are tied to it rather than to a name
+ * someone else could register.
  */
 export async function repoById(repoId, { token, fetch, wait } = {}) {
   const path = `/repositories/${Number(repoId)}`;
   const response = await get(path, { token, fetch, wait });
-  return GONE.has(response.status) ? null : describe(await readJSON(response, path), path);
+  return response && describe(await readJSON(response, path), path);
 }
 
 /** The same for a repository's full name, owner/name: how a developer finds their repository's id. */
 export async function repoByName(fullName, { token, fetch, wait } = {}) {
   const path = `/repos/${fullName}`;
   const response = await get(path, { token, fetch, wait });
-  return GONE.has(response.status) ? null : describe(await readJSON(response, path), path);
+  return response && describe(await readJSON(response, path), path);
 }
 
 /**
@@ -132,8 +161,8 @@ export async function listReleases(repoId, { token, fetch, wait, want = 1, maxPa
   for (let page = 1; page <= maxPages; page++) {
     const path = `/repositories/${Number(repoId)}/releases?per_page=${PAGE}&page=${page}`;
     const response = await get(path, { token, fetch, wait });
-    if (GONE.has(response.status)) {
-      throw new Error(`Repository ${repoId} was not found, or is not public`);
+    if (!response) {
+      throw new Error(`Repository ${repoId} was not found, is not public, or has been disabled by GitHub`);
     }
     const releases = await readJSON(response, path);
     if (!Array.isArray(releases)) {

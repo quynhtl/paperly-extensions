@@ -106,7 +106,7 @@ async function candidates(listing) {
   const token = process.env.GITHUB_TOKEN;
   const repo = await repoById(listing.repoId, { token });
   if (!repo) {
-    throw new Error(`Repository ${listing.repoId} (${listing.repo}) no longer exists, or is not public.`);
+    throw new Error(`Repository ${listing.repoId} (${listing.repo}) no longer exists, is not public, or has been disabled by GitHub.`);
   }
   if (repo.fullName.toLowerCase() !== listing.repo.toLowerCase()) {
     throw new Error(

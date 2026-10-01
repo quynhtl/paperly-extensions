@@ -73,6 +73,16 @@ test("a repository that is gone lists nothing, without stopping the build", asyn
   await assert.rejects(listReleases("someone/hello", { fetch }), (e) => !e.fatal && /not found/.test(e.message));
 });
 
+test("a repository GitHub has disabled is gone, without stopping the build", async () => {
+  const { fetch } = fakeFetch(() => ({
+    status: 403,
+    body: { message: "Repository access blocked", block: { reason: "tos", created_at: "2026-09-01T00:00:00Z" } },
+    headers: { "x-ratelimit-remaining": "4990" },
+  }));
+  assert.equal(await repoById(101, { fetch, wait: noWait }), null);
+  await assert.rejects(listReleases(101, { fetch, wait: noWait }), (e) => !e.fatal && /disabled by GitHub/.test(e.message));
+});
+
 test("repositories and their releases are found by numeric id", async () => {
   const { fetch, urls } = fakeFetch((url) =>
     url.endsWith("/repositories/101")
