@@ -73,7 +73,12 @@ export function validateListing(listing, { fileName } = {}) {
   }
   for (const [key, need] of Object.entries(FIELDS)) {
     if (need === "required" && listing[key] === undefined) {
-      errors.push(`"${key}" is required.`);
+      // Where the value comes from is not obvious for repoId alone.
+      errors.push(
+        key === "repoId"
+          ? '"repoId" is required: the repository\'s numeric id, which node scripts/check.mjs --repo-id owner/name prints.'
+          : `"${key}" is required.`,
+      );
     }
   }
 

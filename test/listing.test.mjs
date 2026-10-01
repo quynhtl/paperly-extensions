@@ -35,6 +35,11 @@ test("missing and unknown fields are both errors", () => {
   const errors = validateListing({ ...rest, verified: true });
   assert.ok(errors.some((e) => e.includes('"declares" is required')));
   assert.ok(errors.some((e) => e.includes('Unknown field "verified"')));
+  // A missing repoId says where to find it.
+  const { repoId, ...noRepoId } = listing();
+  assert.deepEqual(validateListing(noRepoId), [
+    '"repoId" is required: the repository\'s numeric id, which node scripts/check.mjs --repo-id owner/name prints.',
+  ]);
 });
 
 test("repoId is a repository's positive numeric id", () => {

@@ -45,17 +45,20 @@ extension that already passes the checks, and follow
    letters, digits, `.`, `_`, `@` and `-` replaced by `_`.
 3. **Publish a GitHub release** in a public repository, with the `.xpi`
    attached.
-4. **Check it** the way the marketplace will (Node 20 or later, nothing to
+4. **Write the listing**, `extensions/<id>.json` (below), in a clone of this
+   repository. Its `repoId` is your repository's numeric id, which
+   `node scripts/check.mjs --repo-id owner/name` prints.
+5. **Check it** the way the marketplace will (Node 20 or later, nothing to
    install):
 
    ```sh
    node scripts/check.mjs extensions/<id>.json --xpi path/to/your.xpi
    ```
 
-5. **Open a pull request** adding `extensions/<id>.json` (below), from the
-   GitHub account that owns the repository named in it. A repository owned by
-   an organisation is listed by a maintainer: its pull request stays open
-   until one has looked at it.
+6. **Open a pull request** adding the listing, from the GitHub account that
+   owns the repository named in it. A repository owned by an organisation is
+   listed by a maintainer: its pull request stays open until one has looked
+   at it.
 
 ## The listing file
 

@@ -52,8 +52,11 @@ the running app.
 
 ## 4. Check it as the marketplace will
 
-Clone this repository and write your listing (see the
-[README](../README.md#the-listing-file)), then:
+Clone this repository and write your listing, `extensions/<id>.json` (see
+the [README](../README.md#the-listing-file)). Its `repoId` is your GitHub
+repository's numeric id, which you look up in step 5, once the repository is
+on GitHub; until then any positive number, such as `1`, does for this check.
+Then:
 
 ```sh
 node scripts/check.mjs extensions/<id>.json --xpi path/to/your.xpi
@@ -67,8 +70,8 @@ Fix anything it marks `error`. Declare in the listing whatever it marks as a
 1. Push your repository to GitHub, public.
 2. Create a release whose tag is the version (`v1.0.0`), with the `.xpi`
    attached.
-3. Put your repository's numeric id in the listing as `repoId`;
-   `node scripts/check.mjs --repo-id your-name/your-repo` prints it.
+3. Replace the listing's placeholder `repoId` with your repository's numeric
+   id, which `node scripts/check.mjs --repo-id your-name/your-repo` prints.
 4. Open a pull request here adding `extensions/<id>.json`, from the GitHub
    account that owns your repository. (A repository owned by an organisation
    is listed by a maintainer, so that pull request waits for one.)
