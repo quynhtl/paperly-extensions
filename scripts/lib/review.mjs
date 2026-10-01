@@ -35,6 +35,26 @@ const LISTING_PATH = /^extensions\/[^/]+\.json$/;
  */
 const MAX_FILES = 10;
 
+/** The most finding lines shown for one release; a comment has a size limit. */
+const MAX_FINDINGS = 20;
+
+/**
+ * Text that comes from the pull request or its release (file names, tags,
+ * what the checks found, which quotes ids and code), made safe for the
+ * comment: one line, capped, and set as inline code, so that no Markdown,
+ * link, image or @mention in it takes effect. Without this, an id holding a
+ * line break could add lines of its own to the bot's comment, such as a fake
+ * "Everything passed".
+ */
+export function code(text, max = 300) {
+  let line = String(text).replace(/[\r\n\u2028\u2029]+/g, " ");
+  if (line.length > max) {
+    line = `${line.slice(0, max)}…`;
+  }
+  // A backtick would end the code span; U+02CB looks the same and does not.
+  return `\`${line.replaceAll("`", "\u02cb")}\``;
+}
+
 function parse(text) {
   try {
     return JSON.parse(text);
@@ -80,19 +100,19 @@ export async function reviewSubmission({ author, files, readHead, readBase, reso
     try {
       repo = Number.isSafeInteger(listing.repoId) ? await resolveRepo(listing.repoId) : null;
     } catch (e) {
-      fail(`GitHub could not be asked about repository ${listing.repoId} (${e.message}); push again later.`);
+      fail(`GitHub could not be asked about repository ${listing.repoId} (${code(e.message)}); push again later.`);
       return;
     }
     if (!repo) {
-      fail(`No public repository has the id ${listing.repoId}. \`node scripts/check.mjs --repo-id ${listing.repo}\` prints the right one.`);
+      fail(`No public repository has the id ${listing.repoId}. ${code(`node scripts/check.mjs --repo-id ${listing.repo}`)} prints the right one.`);
     } else if (repo.fullName.toLowerCase() !== String(listing.repo).toLowerCase()) {
-      fail(`Repository ${listing.repoId} is ${repo.fullName}, not ${listing.repo}. \`node scripts/check.mjs --repo-id ${listing.repo}\` prints the right id.`);
+      fail(`Repository ${listing.repoId} is ${code(repo.fullName)}, not ${code(listing.repo)}. ${code(`node scripts/check.mjs --repo-id ${listing.repo}`)} prints the right id.`);
     } else if (repo.owner.type !== "User") {
-      wait(`${listing.repo} belongs to the organisation ${repo.owner.login}, so a maintainer confirms who may list it.`);
+      wait(`${code(listing.repo)} belongs to the organisation ${code(repo.owner.login)}, so a maintainer confirms who may list it.`);
     } else if (repo.owner.id !== author.id) {
-      fail(`@${author.login} is not the owner of ${listing.repo}; a maintainer has to look at this.`);
+      fail(`@${author.login} is not the owner of ${code(listing.repo)}; a maintainer has to look at this.`);
     } else {
-      pass(`@${author.login} ${verb} a listing for ${listing.repo}, which they own.`);
+      pass(`@${author.login} ${verb} a listing for ${code(listing.repo)}, which they own.`);
     }
   }
 
@@ -108,9 +128,9 @@ export async function reviewSubmission({ author, files, readHead, readBase, reso
     if (own && (domain === own || domain.endsWith(`.${own}`))) {
       const proof = await verifyPublisher(listing);
       if (proof.verified) {
-        pass(`The id is under ${own}, which is verified as the publisher of ${listing.repo}.`);
+        pass(`The id is under ${code(own)}, which is verified as the publisher of ${code(listing.repo)}.`);
       } else {
-        wait(`The id is under ${own}, but ${own} did not verify (${proof.problem}), so a maintainer will look at this.`);
+        wait(`The id is under ${code(own)}, but it did not verify (${code(proof.problem)}), so a maintainer will look at this.`);
       }
       return;
     }
@@ -127,7 +147,7 @@ export async function reviewSubmission({ author, files, readHead, readBase, reso
 
   for (const file of files) {
     const failuresBefore = failures;
-    lines.push("", `**${file.filename}**, ${file.status}`);
+    lines.push("", `**${code(file.filename)}**, ${file.status}`);
     if (!LISTING_PATH.test(file.filename) || (file.previousFilename && !LISTING_PATH.test(file.previousFilename))) {
       wait("Only listings in `extensions/` are merged automatically; a maintainer will review this change.");
       continue;
@@ -146,7 +166,7 @@ export async function reviewSubmission({ author, files, readHead, readBase, reso
     const listing = parse(await readHead(file.filename));
     const errors = validateListing(listing, { fileName: basename(file.filename) });
     if (errors.length) {
-      fail(`The listing has problems:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
+      fail(`The listing has problems:\n${errors.map((e) => `  - ${code(e)}`).join("\n")}`);
       continue;
     }
     pass("The listing is valid.");
@@ -179,19 +199,21 @@ export async function reviewSubmission({ author, files, readHead, readBase, reso
     }
 
     const release = await checkRelease(listing);
-    if (!release.ok) {
-      fail(release.problem || `The newest release (${release.label}) does not pass the checks:`);
-      for (const f of release.findings ?? []) {
-        if (f.level === "error") {
-          lines.push(`  - ${f.message}`);
-        }
+    const show = (findings, line) => {
+      for (const f of findings.slice(0, MAX_FINDINGS)) {
+        lines.push(line(f));
       }
+      if (findings.length > MAX_FINDINGS) {
+        lines.push(`  - and ${findings.length - MAX_FINDINGS} more; \`node scripts/check.mjs\` lists them all.`);
+      }
+    };
+    if (!release.ok) {
+      fail(release.problem ? code(release.problem) : `The newest release (${code(release.label)}) does not pass the checks:`);
+      show((release.findings ?? []).filter((f) => f.level === "error"), (f) => `  - ${code(f.message)}`);
       continue;
     }
-    pass(`The newest release, ${release.label} (version ${release.version}), passes the checks.`);
-    for (const f of release.findings) {
-      lines.push(`  - ${f.level === "warning" ? "⚠️" : "ℹ️"} ${f.message}`);
-    }
+    pass(`The newest release, ${code(release.label)} (version ${code(release.version)}), passes the checks.`);
+    show(release.findings, (f) => `  - ${f.level === "warning" ? "⚠️" : "ℹ️"} ${code(f.message)}`);
   }
 
   lines.push(

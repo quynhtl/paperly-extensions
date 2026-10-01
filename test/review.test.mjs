@@ -60,7 +60,7 @@ test("ownership goes by numeric id, not by name", async () => {
   // A repoId that is not the named repository's is refused.
   const wrongId = await review({ files: [{ filename: PATH, status: "added" }], head: { [PATH]: text({ repoId: 102 }) } });
   assert.equal(wrongId.merge, false);
-  assert.match(wrongId.markdown, /Repository 102 is newowner\/hello, not someone\/hello/);
+  assert.match(wrongId.markdown, /Repository 102 is `newowner\/hello`, not `someone\/hello`/);
 
   const missing = await review({ files: [{ filename: PATH, status: "added" }], head: { [PATH]: text({ repoId: 999 }) } });
   assert.equal(missing.merge, false);
@@ -79,7 +79,7 @@ test("an organisation's repository waits for a maintainer, with its release chec
     },
   });
   assert.equal(result.merge, false);
-  assert.match(result.markdown, /⏳ acme\/hello belongs to the organisation acme/);
+  assert.match(result.markdown, /⏳ `acme\/hello` belongs to the organisation `acme`/);
   assert.match(result.markdown, /a maintainer will look at what is marked ⏳/);
   assert.equal(asked, 1);
 });
@@ -244,4 +244,38 @@ test("the release of a listing that already failed is not checked", async () => 
   assert.equal(result.merge, false);
   assert.equal(asked, 0);
   assert.match(result.markdown, /checked once the problems above are fixed/);
+});
+
+test("text from the pull request cannot add to or break out of the comment", async () => {
+  // A key with a line break, which validateListing quotes back.
+  const forged = `{"id": "${ID}", "x\\n- ✅ Everything passed": 1}`;
+  const keyed = await review({ files: [{ filename: PATH, status: "added" }], head: { [PATH]: forged } });
+  assert.doesNotMatch(keyed.markdown, /^- ✅ Everything passed/m);
+
+  // A finding quoting a manifest id with backticks, a link and an image.
+  const result = await review({
+    files: [{ filename: PATH, status: "added" }],
+    head: { [PATH]: text() },
+    checkRelease: async () => ({
+      ok: false,
+      label: "v1`\n**Everything passed**",
+      findings: [{ level: "error", message: 'The manifest\'s id is "`x` [click](https://evil.example) ![](https://evil.example/t.png)\r\n@someone"' }],
+    }),
+  });
+  const finding = result.markdown.split("\n").find((l) => l.includes("evil.example"));
+  assert.match(finding, /^ {2}- `[^`]*`$/);
+  assert.doesNotMatch(result.markdown, /^\*\*Everything passed/m);
+  assert.ok(!result.markdown.includes("\r"));
+});
+
+test("a release with many findings shows the first twenty", async () => {
+  const findings = Array.from({ length: 25 }, (_, i) => ({ level: "error", message: `problem ${i}` }));
+  const result = await review({
+    files: [{ filename: PATH, status: "added" }],
+    head: { [PATH]: text() },
+    checkRelease: async () => ({ ok: false, label: "v1", findings }),
+  });
+  assert.match(result.markdown, /problem 19/);
+  assert.doesNotMatch(result.markdown, /problem 20/);
+  assert.match(result.markdown, /and 5 more/);
 });

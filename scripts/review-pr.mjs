@@ -25,6 +25,7 @@ if (!token || !registry || !Number.isInteger(number) || !/^[0-9a-f]{40}$/.test(H
   process.exit(2);
 }
 const MARKER = "<!-- paperly-marketplace-check -->";
+const BOT = "github-actions[bot]";
 const config = loadConfig();
 
 async function api(path, { method = "GET", body } = {}) {
@@ -65,10 +66,18 @@ async function readFile(repo, path, ref) {
 
 /** Comments with the result, and tells the merge step whether to merge HEAD_SHA. */
 async function finish(markdown, merge) {
-  // One comment per pull request, updated on every push.
+  // One comment per pull request, updated on every push. Only the bot's own:
+  // anyone can post a comment that starts with the marker, and the bot must
+  // not take theirs over (or be kept from posting by it).
   const body = `${MARKER}\n${markdown}`;
-  const comments = await json(`/repos/${registry}/issues/${number}/comments?per_page=100`);
-  const previous = comments.find((c) => c.body?.startsWith(MARKER));
+  let previous = null;
+  for (let page = 1; !previous && page <= 30; page++) {
+    const batch = await json(`/repos/${registry}/issues/${number}/comments?per_page=100&page=${page}`);
+    previous = batch.find((c) => c.user?.login === BOT && c.body?.startsWith(MARKER)) ?? null;
+    if (batch.length < 100) {
+      break;
+    }
+  }
   const response = previous
     ? await api(`/repos/${registry}/issues/comments/${previous.id}`, { method: "PATCH", body: { body } })
     : await api(`/repos/${registry}/issues/${number}/comments`, { method: "POST", body: { body } });
