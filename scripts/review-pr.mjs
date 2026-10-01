@@ -159,6 +159,7 @@ const files = (comparison.files ?? []).map((f) => ({
 const review = await reviewSubmission({
   author: { login: pr.user.login, id: pr.user.id },
   files,
+  draft: pr.draft === true,
   readHead: (path) => readFile(pr.head.repo.full_name, path, HEAD_SHA),
   readBase: (path) => readFile(registry, path, mainSha),
   resolveRepo: (repoId) => repoById(repoId, { token, fetch: apiFetch }),

@@ -79,5 +79,6 @@ Fix anything it marks `error`. Declare in the listing whatever it marks as a
    is listed by a maintainer, so that pull request waits for one.)
 
 The pull request is checked automatically and merged when everything passes;
-your extension appears in Paperly within a few hours. Later versions need no
+your extension appears in Paperly within a few hours. A draft pull request is
+checked too, but merged only once you mark it ready for review. Later versions need no
 pull request: publish a new release and the marketplace picks it up.

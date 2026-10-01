@@ -67,7 +67,8 @@ function parse(text) {
 
 /**
  * `files` are the pull request's changed files ({ filename, status,
- * previousFilename }), and `author` who opened it ({ login, id }). The
+ * previousFilename }), `author` who opened it ({ login, id }), and `draft`
+ * whether it is a draft, which GitHub does not merge. The
  * callbacks reach out: `readHead` and `readBase` return a file's text in the
  * pull request and in the base branch (or null), `resolveRepo(repoId)` the
  * public repository with that numeric id ({ fullName, owner: { login, id,
@@ -85,6 +86,7 @@ function parse(text) {
 export async function reviewSubmission({
   author,
   files,
+  draft = false,
   readHead,
   readBase,
   resolveRepo,
@@ -162,6 +164,11 @@ export async function reviewSubmission({
     wait(
       `A new id is merged automatically only when it is yours: name@${pages}, or name@ your verified publisherDomain. A maintainer will look at this one.`,
     );
+  }
+
+  if (draft) {
+    lines.push("");
+    wait("This pull request is a draft: mark it ready for review to have it merged.");
   }
 
   if (files.length > MAX_FILES) {
@@ -247,13 +254,17 @@ export async function reviewSubmission({
     show(release.findings, (f) => `  - ${f.level === "warning" ? "⚠️" : "ℹ️"} ${code(f.message)}`);
   }
 
+  // "Will be": the merge comes after this comment, and GitHub can still
+  // refuse it.
   lines.push(
     "",
     merge
-      ? "**Everything passed, so this is merged automatically.** The extension appears in Paperly after the next publish."
+      ? "**Everything passed, so this will be merged automatically.** The extension appears in Paperly after the next publish."
       : failures
         ? "**Not merged automatically.** Fix what is marked ❌ and push again, or wait for a maintainer."
-        : "**Not merged automatically:** a maintainer will look at what is marked ⏳.",
+        : draft && waiting === 1
+          ? "**Not merged yet:** everything else passed. Mark the pull request ready for review to have it merged."
+          : "**Not merged automatically:** a maintainer will look at what is marked ⏳.",
   );
   return { merge, markdown: ["### Marketplace check", ...lines].join("\n") };
 }

@@ -28,10 +28,11 @@ const verifyPublisher = (l) =>
     },
   });
 
-function review({ author = "someone", files, head = {}, base = {}, checkRelease = passing, repos = REPOS, budgetLeft }) {
+function review({ author = "someone", files, draft, head = {}, base = {}, checkRelease = passing, repos = REPOS, budgetLeft }) {
   return reviewSubmission({
     author: { login: author, id: USERS[author] },
     files,
+    draft,
     readHead: async (path) => head[path] ?? null,
     readBase: async (path) => base[path] ?? null,
     resolveRepo: async (id) => repos[id] ?? null,
@@ -49,7 +50,27 @@ const text = (overrides) => JSON.stringify(listing({ id: ID, ...overrides }));
 test("the owner adding a listing whose release passes is merged", async () => {
   const result = await review({ files: [{ filename: PATH, status: "added" }], head: { [PATH]: text() } });
   assert.equal(result.merge, true);
-  assert.match(result.markdown, /merged automatically/);
+  // The comment comes before the merge, which can still fail.
+  assert.match(result.markdown, /\*\*Everything passed, so this will be merged automatically\.\*\*/);
+});
+
+test("a draft is checked, and merged only once it is marked ready for review", async () => {
+  const files = [{ filename: PATH, status: "added" }];
+  const draft = await review({ files, draft: true, head: { [PATH]: text() } });
+  assert.equal(draft.merge, false);
+  assert.match(draft.markdown, /- ⏳ This pull request is a draft: mark it ready for review to have it merged\./);
+  assert.match(draft.markdown, /✅ The newest release/);
+  assert.match(draft.markdown, /\*\*Not merged yet:\*\* everything else passed/);
+  assert.doesNotMatch(draft.markdown, /will be merged/);
+
+  // With something else for a maintainer, that is what the comment ends on.
+  const org = await review({
+    files: [{ filename: PATH, status: "added" }],
+    draft: true,
+    head: { [PATH]: text({ repo: "acme/hello", repoId: 201 }) },
+  });
+  assert.equal(org.merge, false);
+  assert.match(org.markdown, /a maintainer will look at what is marked ⏳/);
 });
 
 test("someone else's repository waits for a maintainer", async () => {
