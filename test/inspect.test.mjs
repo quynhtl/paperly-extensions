@@ -116,6 +116,13 @@ test("an SVG icon that is more than a picture is not shown", () => {
     '<svg xmlns="http://www.w3.org/2000/svg"><set attributeName="fill" to="red"/></svg>',
     '<svg xmlns="http://www.w3.org/2000/svg" xmlns:h="http://www.w3.org/1999/xhtml"><h:iframe/></svg>',
     '<svg xmlns="http://www.w3.org/2000/svg"><rect style="fill: url(https://evil.example/track)"/></svg>',
+    // CSS that fetches with no "url(" written.
+    '<svg xmlns="http://www.w3.org/2000/svg"><style>@import "https://evil.example/a.css";</style></svg>',
+    `<svg xmlns="http://www.w3.org/2000/svg"><rect style="background-image:image-set('https://evil.example/p.png' 1x)"/></svg>`,
+    `<svg xmlns="http://www.w3.org/2000/svg"><rect style="background-image:-webkit-image-set('https://evil.example/p.png' 1x)"/></svg>`,
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect style="background-image:src(\'https://evil.example/p.png\')"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><style>@\\69mport "https://evil.example/a.css";</style></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="u\\72l(https://evil.example/p.svg#a)"/></svg>',
   ];
   for (const svg of unsafe) {
     const result = withIcon(svg);

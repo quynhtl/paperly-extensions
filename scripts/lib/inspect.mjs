@@ -147,6 +147,11 @@ const ICON_TYPES = { png: "image/png", svg: "image/svg+xml", jpg: "image/jpeg", 
  * other than XML's five predefined ones, and (in unsafeSVG) processing
  * instructions and encodings other than UTF-8.
  *
+ * CSS, in a <style> or in any attribute, fetches through more than url():
+ * @import and image-set() take a plain string, as src() does where CSS
+ * now specifies it, and an escape spells any name, so "u\72l(" is url().
+ * Those are refused, and so is every backslash.
+ *
  * The icon is anyone's text, so no pattern here may go back over it: each
  * must cost time in proportion to the text, or be bounded, like
  * XML_DECLARATION below.
@@ -158,6 +163,10 @@ const SVG_UNSAFE = [
   /javascript:/i,
   /\bhref\s*=(?!\s*["']\s*#)/i,
   /url\(\s*["']?\s*(?!#)/i,
+  /@import/i,
+  /image-set\(/i,
+  /\bsrc\(/i,
+  /\\/,
   /<!(?!--)/,
   /[\0-\x08\x0b\x0c\x0e-\x1f]/,
   /&(?!(?:lt|gt|amp|quot|apos);)/,
