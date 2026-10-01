@@ -40,17 +40,41 @@ export function crc32(data) {
 
 export class ZipError extends Error {}
 
+const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+/** A name that could reach outside the folder it is unpacked into, or mean different things to different readers. */
+function unsafeName(name) {
+  return (
+    name === "" ||
+    name.includes("\\") ||
+    name.startsWith("/") ||
+    /^[A-Za-z]:/.test(name) ||
+    name.split("/").includes("..")
+  );
+}
+
 /**
  * Opens an archive held in a Buffer. Returns the entry names and a `read`
  * that inflates one entry and checks its CRC.
  *
  * ZIP64 and encrypted entries are refused: a plugin has no use for either,
  * and refusing them keeps the reader small.
+ *
+ * What is checked must be what Paperly runs, so anything Gecko's own reader
+ * (nsZipArchive) would read differently is refused rather than guessed at.
+ * Gecko ignores the entry count and walks the directory until the end record,
+ * and of two entries with the same name it uses the last; so the directory
+ * here must end exactly at the end record, and every name must be unique.
  */
 export function readZip(buffer, limits = {}) {
   const { maxEntryBytes, maxTotalBytes } = { ...DEFAULT_LIMITS, ...limits };
   if (!Buffer.isBuffer(buffer) || buffer.length < 22) {
     throw new ZipError("Not a ZIP archive");
+  }
+  // A directory record at byte 4 is Gecko's "optimized jar" layout, in which
+  // it skips the end record and reads a directory of its own choosing.
+  if (buffer.readUInt32LE(4) === CENTRAL) {
+    throw new ZipError("The archive uses a layout that Paperly would read differently");
   }
 
   // The end-of-central-directory record is the last thing in the file, after
@@ -77,9 +101,10 @@ export function readZip(buffer, limits = {}) {
   }
 
   const entries = new Map();
+  const seen = new Set();
   let p = cdOffset;
   for (let i = 0; i < count; i++) {
-    if (p + 46 > buffer.length || buffer.readUInt32LE(p) !== CENTRAL) {
+    if (p + 46 > eocd || buffer.readUInt32LE(p) !== CENTRAL) {
       throw new ZipError("The archive's directory is damaged");
     }
     const flags = buffer.readUInt16LE(p + 8);
@@ -91,19 +116,52 @@ export function readZip(buffer, limits = {}) {
     const extraLength = buffer.readUInt16LE(p + 30);
     const commentLength = buffer.readUInt16LE(p + 32);
     const offset = buffer.readUInt32LE(p + 42);
-    const name = buffer.toString("utf8", p + 46, p + 46 + nameLength);
+    const rawName = buffer.subarray(p + 46, p + 46 + nameLength);
     p += 46 + nameLength + extraLength + commentLength;
+    if (p > eocd) {
+      throw new ZipError("The archive's directory is damaged");
+    }
 
+    // Gecko compares names as bytes. Decoding with replacement characters
+    // would let two different names become one here, and only one be checked.
+    let name;
+    try {
+      name = UTF8.decode(rawName);
+    } catch {
+      throw new ZipError("A file name in the archive is not valid UTF-8");
+    }
+    const key = rawName.toString("latin1");
+    if (seen.has(key)) {
+      throw new ZipError(`${name} is in the archive twice`);
+    }
+    seen.add(key);
+    if (unsafeName(name)) {
+      throw new ZipError(`${JSON.stringify(name)} is not a safe file name`);
+    }
     if (flags & 1) {
       throw new ZipError(`${name} is encrypted`);
     }
     if (size === 0xffffffff || compressedSize === 0xffffffff || offset === 0xffffffff) {
       throw new ZipError("ZIP64 archives are not supported");
     }
+    // Tools that read the local headers instead of the directory must see
+    // the same names.
+    if (
+      offset + 30 > buffer.length ||
+      buffer.readUInt32LE(offset) !== LOCAL ||
+      buffer.readUInt16LE(offset + 26) !== nameLength ||
+      offset + 30 + nameLength > buffer.length ||
+      !buffer.subarray(offset + 30, offset + 30 + nameLength).equals(rawName)
+    ) {
+      throw new ZipError(`${name} has a different name, or none, in its local header`);
+    }
     if (name.endsWith("/")) {
       continue;
     }
     entries.set(name, { name, method, crc, compressedSize, size, offset });
+  }
+  if (p !== cdOffset + cdSize || p !== eocd) {
+    throw new ZipError("The archive's directory holds more than its end record says");
   }
 
   let total = 0;
@@ -155,7 +213,8 @@ export function readZip(buffer, limits = {}) {
 
 /**
  * Writes an archive from `[{ name, data }]`. Timestamps are fixed, so the same
- * files always make the same bytes -- and so the same hash.
+ * files always make the same bytes -- and so the same hash. A name may be a
+ * Buffer, for tests that need bytes no string would give.
  */
 export function writeZip(files, { compress = true } = {}) {
   const locals = [];
@@ -166,7 +225,7 @@ export function writeZip(files, { compress = true } = {}) {
   const date = (0 << 9) | (1 << 5) | 1;
 
   for (const file of files) {
-    const name = Buffer.from(file.name, "utf8");
+    const name = Buffer.isBuffer(file.name) ? file.name : Buffer.from(file.name, "utf8");
     const data = Buffer.isBuffer(file.data) ? file.data : Buffer.from(String(file.data), "utf8");
     const deflated = compress ? zlib.deflateRawSync(data, { level: 9 }) : null;
     const useDeflate = deflated !== null && deflated.length < data.length;
