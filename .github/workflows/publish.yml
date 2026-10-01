@@ -60,3 +60,19 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # In a public repository, GitHub disables a scheduled workflow after 60
+  # days without activity, and then nothing starts it, not even a push: a
+  # quiet marketplace would stop publishing, blocks included, and a week
+  # later every copy of Paperly would refuse its index as stale. Enabling it
+  # again on every scheduled run keeps the count from running out.
+  keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/publish.yml/enable"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
