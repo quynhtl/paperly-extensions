@@ -101,6 +101,16 @@ test("an SVG icon that is more than a picture is not shown", () => {
     '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a xlink:href="https://evil.example/"><rect/></a></svg>',
     '<svg xmlns="http://www.w3.org/2000/svg"><a href="javascript:alert(1)"><rect/></a></svg>',
     Buffer.from("\ufeff<svg><script>alert(1)</script></svg>", "utf16le"),
+    // Markup spelled with references, which the browser's parser expands.
+    '<?xml version="1.0"?><!DOCTYPE svg [<!ENTITY p "&#60;script&#62;alert(document.domain)&#60;/script&#62;">]><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">&p;</svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><a><animate attributeName="href" values="&#106;avascript:alert(1)"/><rect/></a></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><style><![CDATA[rect { fill: red }]]></style></svg>',
+    '<?xml version="1.0"?><?xml-stylesheet href="https://evil.example/s.css"?><svg xmlns="http://www.w3.org/2000/svg"/>',
+    '<?xml version="1.0" encoding="ISO-2022-JP"?><svg xmlns="http://www.w3.org/2000/svg"><title>\x1b$B\x1b(B</title></svg>',
+    // Elements that are not drawing, and resources from elsewhere.
+    '<svg xmlns="http://www.w3.org/2000/svg"><set attributeName="fill" to="red"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:h="http://www.w3.org/1999/xhtml"><h:iframe/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect style="fill: url(https://evil.example/track)"/></svg>',
   ];
   for (const svg of unsafe) {
     const result = withIcon(svg);
@@ -108,9 +118,23 @@ test("an SVG icon that is more than a picture is not shown", () => {
     assert.equal(result.icon, null, String(svg));
     assert.ok(codes(result, "notice").includes("icon-unsafe"), String(svg));
   }
-  const safe = withIcon('<svg xmlns="http://www.w3.org/2000/svg"><defs><path id="p" d="M0 0h9"/></defs><use href = "#p"/></svg>');
-  assert.equal(safe.icon.type, "image/svg+xml");
-  assert.deepEqual(safe.findings, []);
+  const safe = [
+    '<svg xmlns="http://www.w3.org/2000/svg"><defs><path id="p" d="M0 0h9"/></defs><use href = "#p"/></svg>',
+    [
+      '<?xml version="1.0" encoding="UTF-8" standalone="no"?>',
+      "<!-- Generator: a drawing program -->",
+      '<svg:svg xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">',
+      "<svg:title>Lines &amp; dots</svg:title>",
+      '<svg:linearGradient id="g"><svg:stop offset="0" stop-color="#fff"/></svg:linearGradient>',
+      '<svg:circle r="9" fill="url(#g)"/><svg:use xlink:href="#g"/>',
+      "</svg:svg>",
+    ].join("\n"),
+  ];
+  for (const svg of safe) {
+    const result = withIcon(svg);
+    assert.equal(result.icon?.type, "image/svg+xml", svg);
+    assert.deepEqual(result.findings, []);
+  }
 });
 
 test("what the code uses is compared with what the listing declares", () => {

@@ -134,9 +134,18 @@ const ICON_TYPES = { png: "image/png", svg: "image/svg+xml", jpg: "image/jpeg", 
 
 /**
  * What makes an SVG more than a picture: scripts, event handlers, embedded
- * HTML, and links anywhere but inside itself. Inside Paperly an icon is shown
- * as an image, where none of it runs, but the marketplace serves the icon on
- * its own web address too, and opened there it would run on that site.
+ * HTML, and links or resources anywhere but inside itself. Inside Paperly an
+ * icon is shown as an image, where none of it runs, but the marketplace
+ * serves the icon on its own web address too, and opened there it would run
+ * on that site.
+ *
+ * Matching the text is not enough by itself, since XML can spell markup with
+ * references: an entity declared as "&#60;script&#62;" is a script element
+ * once the browser's parser expands it, though no "<script" is written. So
+ * whatever could make the parser see other than what is written is refused
+ * too: declarations (DOCTYPE, ENTITY, CDATA), processing instructions other
+ * than the XML declaration, an encoding other than UTF-8, control
+ * characters, and references other than XML's five predefined ones.
  */
 const SVG_UNSAFE = [
   /<(?:[\w.-]+:)?script\b/i,
@@ -144,7 +153,29 @@ const SVG_UNSAFE = [
   /<(?:[\w.-]+:)?foreignObject\b/i,
   /javascript:/i,
   /\bhref\s*=(?!\s*["']\s*#)/i,
+  /url\(\s*["']?\s*(?!#)/i,
+  /<!(?!--)/,
+  /<\?(?!xml\s)/i,
+  /<\?xml[^>]*\bencoding\s*=\s*["'](?!utf-8["'])/i,
+  /[\0-\x08\x0b\x0c\x0e-\x1f]/,
+  /&(?!(?:lt|gt|amp|quot|apos);)/,
 ];
+
+/**
+ * The elements of a drawing. Any other (an <a>, an <animate> that could turn
+ * an attribute into a link, an element of HTML) keeps the icon from being
+ * shown; the patterns above cannot foresee every one.
+ */
+const SVG_ELEMENTS = new Set([
+  "svg", "g", "defs", "symbol", "use", "switch", "title", "desc", "metadata", "style",
+  "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "text", "tspan", "textPath",
+  "linearGradient", "radialGradient", "stop", "pattern", "clipPath", "mask", "marker",
+  "filter", "feBlend", "feColorMatrix", "feComponentTransfer", "feComposite", "feConvolveMatrix",
+  "feDiffuseLighting", "feDisplacementMap", "feDistantLight", "feDropShadow", "feFlood",
+  "feFuncA", "feFuncB", "feFuncG", "feFuncR", "feGaussianBlur", "feMerge", "feMergeNode",
+  "feMorphology", "feOffset", "fePointLight", "feSpecularLighting", "feSpotLight", "feTile",
+  "feTurbulence",
+]);
 
 const UTF8 = new TextDecoder("utf-8", { fatal: true });
 
@@ -156,7 +187,18 @@ function unsafeSVG(data) {
     // Another encoding (UTF-16, say) would hide all of the above from the patterns.
     return true;
   }
-  return text.includes("\0") || SVG_UNSAFE.some((p) => p.test(text));
+  if (SVG_UNSAFE.some((p) => p.test(text))) {
+    return true;
+  }
+  // Every element's name, with any namespace prefix left off. With no
+  // declarations or references allowed, every "<" in the text that is not a
+  // comment, the XML declaration or an end tag starts one.
+  for (const [, name] of text.matchAll(/<(?![/!?])([^\s/>]*)/g)) {
+    if (!SVG_ELEMENTS.has(name.slice(name.indexOf(":") + 1))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 const MAX_VERSION_LENGTH = 64;
@@ -376,7 +418,10 @@ export function inspectXpi(buffer, { listing, config }) {
       data = null;
     }
     if (data && type === "image/svg+xml" && unsafeSVG(data)) {
-      notice("icon-unsafe", `The icon ${iconPath} holds scripts, event handlers, HTML or links, so the marketplace does not show it.`);
+      notice(
+        "icon-unsafe",
+        `The icon ${iconPath} is more than a drawing (it holds scripts, event handlers, HTML, links, or markup the checks cannot read as written), so the marketplace does not show it.`,
+      );
     } else if (data) {
       result.icon = { path: iconPath, type, data };
     } else {
