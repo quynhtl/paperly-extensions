@@ -10,8 +10,8 @@
   },
   "applications": {
     "zotero": {
-      "id": "hello-paperly@your-login.github.io",
-      "update_url": "https://quynhtl.github.io/paperly-extensions/updates/hello-paperly@your-login.github.io.json",
+      "id": "hello-paperly@example.invalid",
+      "update_url": "https://quynhtl.github.io/paperly-extensions/updates/hello-paperly@example.invalid.json",
       "strict_min_version": "10.999",
       "strict_max_version": "11.*"
     }

@@ -6,19 +6,29 @@
 //
 // It refuses to build what the Paperly marketplace would refuse -- no id, no
 // version bounds, no bootstrap.js, or an update_url that does not point at the
-// marketplace -- so a mistake shows up here rather than in a pull request.
+// marketplace -- so a mistake shows up here rather than in a pull request. It
+// refuses the template's placeholder id too, until you choose your own.
 //
 //   PAPERLY_MARKETPLACE=http://127.0.0.1:8765/ node scripts/build.mjs
 //
 // builds for a local test marketplace instead: src/manifest.json stays as it
 // is, and the packed copy's update_url points at that address. Such an .xpi is
-// for testing only; the marketplace refuses it.
+// for testing only, so it may keep the placeholder id; the marketplace refuses
+// it.
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import zlib from "node:zlib";
 
 export const MARKETPLACE = "https://quynhtl.github.io/paperly-extensions/";
+
+/**
+ * Ids under names reserved for examples and tests, the template's own
+ * hello-paperly@example.invalid among them. No one can own such a name, so
+ * the marketplace never lists an id under it; and every copy of the template
+ * built unchanged would share the id, so installing one would replace another.
+ */
+const PLACEHOLDER_ID = /@(?:[^@]*\.)?(?:example\.(?:com|net|org)|example|invalid|localhost|test)$/i;
 
 /** The id as it appears in the marketplace's file names and URLs. */
 export function slug(id) {
@@ -111,9 +121,12 @@ function listFiles(dir) {
  * Reads src/ and returns the .xpi's name and bytes, or throws with every
  * problem found. `warnings` are things to fix before publishing.
  * `marketplace`, when given, is a test marketplace the packed manifest's
- * update_url points at instead of the real one.
+ * update_url points at instead of the real one. `allowPlaceholderId` lets a
+ * placeholder id through with a warning instead of refusing it; it does so by
+ * default for a test marketplace, whose builds are only tried locally.
  */
-export function buildXpi(srcDir, { marketplace } = {}) {
+export function buildXpi(srcDir, { marketplace, allowPlaceholderId } = {}) {
+  const testing = Boolean(marketplace) && marketplace !== MARKETPLACE;
   const problems = [];
   const warnings = [];
   let manifest;
@@ -137,10 +150,15 @@ export function buildXpi(srcDir, { marketplace } = {}) {
   if (zotero.id && zotero.update_url !== updateURL) {
     problems.push(`"applications.zotero.update_url" must be ${updateURL}`);
   }
-  if (/@(?:your-login\.github\.io|example\.com)$/i.test(zotero.id ?? "")) {
-    warnings.push(
-      `The id is still ${zotero.id}. Choose your own, such as name@<your GitHub login>.github.io, before you publish: it can never change afterwards.`,
-    );
+  if (PLACEHOLDER_ID.test(zotero.id ?? "")) {
+    const choose = `Choose your own, such as name@<your GitHub login>.github.io: it can never change once the extension is listed.`;
+    if (allowPlaceholderId ?? testing) {
+      warnings.push(`The id is still ${zotero.id}. ${choose}`);
+    } else {
+      problems.push(
+        `"applications.zotero.id" is still ${zotero.id}, a placeholder. ${choose} (A build for a local test marketplace, with PAPERLY_MARKETPLACE set, may keep it.)`,
+      );
+    }
   }
   const files = listFiles(srcDir).map((path) => ({
     name: relative(srcDir, path).split(sep).join("/"),
@@ -153,7 +171,7 @@ export function buildXpi(srcDir, { marketplace } = {}) {
   if (problems.length) {
     throw new Error(problems.join("\n"));
   }
-  if (marketplace && marketplace !== MARKETPLACE) {
+  if (testing) {
     const packed = structuredClone(manifest);
     packed.applications.zotero.update_url = `${marketplace}updates/${slug(zotero.id)}.json`;
     files.find((f) => f.name === "manifest.json").data = Buffer.from(`${JSON.stringify(packed, null, 2)}\n`);

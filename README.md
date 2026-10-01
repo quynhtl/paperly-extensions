@@ -188,7 +188,8 @@ marketplace around it:
 
 ```sh
 # in your extension's folder (made from template/); src/ stays as it is,
-# and the .xpi's update_url points at the local marketplace
+# and the .xpi's update_url points at the local marketplace. Only this
+# build takes the template's placeholder id, hello-paperly@example.invalid.
 PAPERLY_MARKETPLACE=http://127.0.0.1:8765/ npm run build
 
 # here

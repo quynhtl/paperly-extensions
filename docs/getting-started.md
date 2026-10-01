@@ -11,13 +11,14 @@ marketplace's checks.
 
 In `src/manifest.json`, set:
 
-- `applications.zotero.id`: your extension's permanent id, such as
-  `citation-check@your-login.github.io`, with your GitHub login. It can never
-  change once the extension is listed. A new listing is merged automatically
-  only when its id ends in `@<your-login>.github.io`, or in `@` a domain you
-  have verified as your `publisherDomain` (see the
-  [README](../README.md#verified-publishers)); any other id waits for a
-  maintainer.
+- `applications.zotero.id`: your extension's permanent id, in place of the
+  template's placeholder `hello-paperly@example.invalid`, which the build
+  refuses. Choose one such as `citation-check@<your-login>.github.io`, with
+  your GitHub login. It can never change once the extension is listed. A new
+  listing is merged automatically only when its id ends in
+  `@<your-login>.github.io`, or in `@` a domain you have verified as your
+  `publisherDomain` (see the [README](../README.md#verified-publishers)); any
+  other id waits for a maintainer.
 - `applications.zotero.update_url`:
   `https://quynhtl.github.io/paperly-extensions/updates/<id>.json`. The build
   prints the exact value if yours is wrong.
