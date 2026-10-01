@@ -14,7 +14,7 @@ import { sign } from "./sign.mjs";
 import { verifyPublisher as checkPublisherDomain } from "./verify.mjs";
 import { compareVersions } from "./version.mjs";
 
-const ICON_EXTENSIONS = { "image/png": "png", "image/svg+xml": "svg", "image/jpeg": "jpg" };
+const ICON_EXTENSIONS = { "image/png": "png", "image/jpeg": "jpg" };
 
 /**
  * Problems with blocked.json, which uses the format of Zotero's own

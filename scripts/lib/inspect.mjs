@@ -130,132 +130,24 @@ const NOT_CONTACTED = new Set([
 
 const URL_IN_STRING = /["'`](?:https?|wss?):\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi;
 
-const ICON_TYPES = { png: "image/png", svg: "image/svg+xml", jpg: "image/jpeg", jpeg: "image/jpeg" };
-
 /**
- * What makes an SVG more than a picture: scripts, event handlers, embedded
- * HTML, and links or resources anywhere but inside itself. Inside Paperly an
- * icon is shown as an image, where none of it runs, but the marketplace
- * serves the icon on its own web address too, and opened there it would run
- * on that site.
- *
- * Matching the text is not enough by itself, since XML can spell markup with
- * references: an entity declared as "&#60;script&#62;" is a script element
- * once the browser's parser expands it, though no "<script" is written. So
- * whatever could make the parser see other than what is written is refused
- * too: declarations (DOCTYPE, ENTITY, CDATA), control characters, references
- * other than XML's five predefined ones, and (in unsafeSVG) processing
- * instructions and encodings other than UTF-8.
- *
- * CSS, in a <style> or in any attribute, fetches through more than url():
- * @import and image-set() take a plain string, as src() does where CSS
- * now specifies it, and an escape spells any name, so "u\72l(" is url().
- * Those are refused, and so is every backslash. A name can also be split by
- * markup, which styleHoldsMarkup below refuses.
- *
- * The icon is anyone's text, so no pattern here may go back over it: each
- * must cost time in proportion to the text, or be bounded, like
- * XML_DECLARATION below.
+ * Icons the marketplace re-hosts: PNG and JPEG only. It serves them on its own
+ * web address, where an SVG opened directly would run any script in it on
+ * that site; telling a harmless SVG from a harmful one took one pattern after
+ * another, each with a way around it, while a PNG or JPEG cannot run anything.
+ * Each must start the way its format does, so no other file can pass for one.
  */
-const SVG_UNSAFE = [
-  /<(?:[\w.-]+:)?script\b/i,
-  /\bon[a-z]+\s*=/i,
-  /<(?:[\w.-]+:)?foreignObject\b/i,
-  /javascript:/i,
-  /\bhref\s*=(?!\s*["']\s*#)/i,
-  /url\(\s*["']?\s*(?!#)/i,
-  /@import/i,
-  /image-set\(/i,
-  /\bsrc\(/i,
-  /\\/,
-  /<!(?!--)/,
-  /[\0-\x08\x0b\x0c\x0e-\x1f]/,
-  /&(?!(?:lt|gt|amp|quot|apos);)/,
+const ICON_FORMATS = [
+  { type: "image/png", extensions: ["png"], magic: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
+  { type: "image/jpeg", extensions: ["jpg", "jpeg"], magic: [0xff, 0xd8, 0xff] },
 ];
 
-/**
- * The XML declaration, which XML allows only at the very start of a file
- * (the decoder below has already taken off any byte order mark). It is
- * looked for there only, and up to a length no real one comes near: a
- * pattern such as /<\?xml[^>]*encoding/ goes over the rest of the text again
- * from every "<?xml" that no ">" follows, and took over a minute on an icon
- * of a megabyte of them. A longer declaration is refused with every other
- * "<?".
- */
-const XML_DECLARATION = /^<\?xml[ \t\r\n][^>]{0,256}\?>/;
+/** An icon for a 96px button needs a few kilobytes; nothing near this. */
+const MAX_ICON_BYTES = 512 * 1024;
 
-/**
- * The largest SVG icon that is shown. A drawing for a 96px icon takes a few
- * kilobytes; the cap keeps the time the patterns take small whatever the
- * icon holds, as MAX_SCANNED_BYTES does for code.
- */
-const MAX_SVG_ICON_BYTES = 256 * 1024;
-
-/**
- * The elements of a drawing. Any other (an <a>, an <animate> that could turn
- * an attribute into a link, an element of HTML) keeps the icon from being
- * shown; the patterns above cannot foresee every one.
- */
-const SVG_ELEMENTS = new Set([
-  "svg", "g", "defs", "symbol", "use", "switch", "title", "desc", "metadata", "style",
-  "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "text", "tspan", "textPath",
-  "linearGradient", "radialGradient", "stop", "pattern", "clipPath", "mask", "marker",
-  "filter", "feBlend", "feColorMatrix", "feComponentTransfer", "feComposite", "feConvolveMatrix",
-  "feDiffuseLighting", "feDisplacementMap", "feDistantLight", "feDropShadow", "feFlood",
-  "feFuncA", "feFuncB", "feFuncG", "feFuncR", "feGaussianBlur", "feMerge", "feMergeNode",
-  "feMorphology", "feOffset", "fePointLight", "feSpecularLighting", "feSpotLight", "feTile",
-  "feTurbulence",
-]);
-
-const UTF8 = new TextDecoder("utf-8", { fatal: true });
-
-/**
- * Whether a <style> holds anything but text. Its stylesheet is its Text
- * children joined, with any comment or element between them left out, so
- * "@imp<!---->ort" or "ur<g/>l(" reaches CSS as @import or url( though the
- * patterns above never see either written. A <style> may hold text only:
- * the first "<" after its start must be an end tag (so an empty <style/>
- * before another element is refused too, which no drawing needs). XML that
- * parses allows no "<" in an attribute's value, so that "<" is past the
- * start tag; and each stretch of text between two "<" is gone over once.
- */
-function styleHoldsMarkup(text) {
-  for (const m of text.matchAll(/<(?:[\w.-]+:)?style\b/gi)) {
-    const next = text.indexOf("<", m.index + 1);
-    if (next < 0 || text[next + 1] !== "/") {
-      return true;
-    }
-  }
-  return false;
-}
-
-function unsafeSVG(data) {
-  let text;
-  try {
-    text = UTF8.decode(data);
-  } catch {
-    // Another encoding (UTF-16, say) would hide all of the above from the patterns.
-    return true;
-  }
-  // A declaration naming another encoding would have the browser read other
-  // markup than these patterns do. Any other "<?" is a processing
-  // instruction (a stylesheet, say), or a declaration where XML allows none.
-  const declaration = XML_DECLARATION.exec(text)?.[0] ?? "";
-  if (/\bencoding\s*=\s*["'](?!utf-8["'])/i.test(declaration) || text.includes("<?", declaration.length)) {
-    return true;
-  }
-  if (SVG_UNSAFE.some((p) => p.test(text)) || styleHoldsMarkup(text)) {
-    return true;
-  }
-  // Every element's name, with any namespace prefix left off. With no
-  // declarations or references allowed, every "<" in the text that is not a
-  // comment, the XML declaration or an end tag starts one.
-  for (const [, name] of text.matchAll(/<(?![/!?])([^\s/>]*)/g)) {
-    if (!SVG_ELEMENTS.has(name.slice(name.indexOf(":") + 1))) {
-      return true;
-    }
-  }
-  return false;
+function iconFormat(path) {
+  const extension = path.split(".").pop().toLowerCase();
+  return ICON_FORMATS.find((f) => f.extensions.includes(extension)) || null;
 }
 
 const MAX_VERSION_LENGTH = 64;
@@ -271,17 +163,23 @@ function snippetAround(text, index) {
     .trim();
 }
 
+/**
+ * The icon to show: of the PNG and JPEG icons the manifest names, the
+ * smallest of at least 64px, else the largest. Returns { path } for that one,
+ * or { skipped } naming an icon in a format the marketplace does not show.
+ */
 function pickIcon(manifest) {
   const icons = manifest.icons && typeof manifest.icons === "object" ? manifest.icons : {};
-  const sizes = Object.keys(icons)
+  const entries = Object.keys(icons)
     .map(Number)
     .filter((n) => Number.isFinite(n) && typeof icons[n] === "string")
-    .sort((a, b) => a - b);
-  if (!sizes.length) {
-    return null;
+    .sort((a, b) => a - b)
+    .map((n) => ({ size: n, path: icons[n].replace(/^\.?\//, "") }));
+  const raster = entries.filter((e) => iconFormat(e.path));
+  if (!raster.length) {
+    return entries.length ? { skipped: entries[entries.length - 1].path } : null;
   }
-  const size = sizes.find((n) => n >= 64) ?? sizes[sizes.length - 1];
-  return icons[size].replace(/^\.?\//, "");
+  return { path: (raster.find((e) => e.size >= 64) ?? raster[raster.length - 1]).path };
 }
 
 /**
@@ -465,33 +363,32 @@ export function inspectXpi(buffer, { listing, config }) {
   }
 
   // The icon, for the marketplace to show.
-  const iconPath = pickIcon(manifest);
-  if (iconPath) {
-    const type = ICON_TYPES[iconPath.split(".").pop().toLowerCase()];
-    // The size the archive states, which zip.read holds the data to: an SVG
-    // icon over the cap is turned down before it is read, or any pattern runs.
-    const size = zip.entries.get(iconPath)?.size ?? 0;
-    const svgTooLarge = type === "image/svg+xml" && size > MAX_SVG_ICON_BYTES;
+  const icon = pickIcon(manifest);
+  if (icon?.skipped) {
+    notice(
+      "icon-format",
+      `The marketplace shows PNG and JPEG icons only, so ${icon.skipped} is not shown. Add a PNG to the icons in manifest.json.`,
+    );
+  } else if (icon) {
+    const format = iconFormat(icon.path);
+    // The size the archive states, which zip.read holds the data to
+    const size = zip.entries.get(icon.path)?.size ?? 0;
     let data = null;
-    try {
-      data = type && !svgTooLarge ? zip.read(iconPath) : null;
-    } catch {
-      data = null;
+    if (size <= MAX_ICON_BYTES) {
+      try {
+        data = zip.read(icon.path);
+      } catch {
+        data = null;
+      }
     }
-    if (svgTooLarge) {
-      notice(
-        "icon-too-large",
-        `The icon ${iconPath} is ${Math.ceil(size / 1024)} KB; an SVG icon over ${MAX_SVG_ICON_BYTES / 1024} KB is not checked, so the marketplace does not show it.`,
-      );
-    } else if (data && type === "image/svg+xml" && unsafeSVG(data)) {
-      notice(
-        "icon-unsafe",
-        `The icon ${iconPath} is more than a drawing (it holds scripts, event handlers, HTML, links, or markup the checks cannot read as written), so the marketplace does not show it.`,
-      );
-    } else if (data) {
-      result.icon = { path: iconPath, type, data };
+    if (size > MAX_ICON_BYTES) {
+      notice("icon-too-large", `The icon ${icon.path} is ${Math.ceil(size / 1024)} KB; the marketplace shows icons up to ${MAX_ICON_BYTES / 1024} KB.`);
+    } else if (!data) {
+      notice("icon-missing", `The icon ${icon.path} is not in the .xpi.`);
+    } else if (!format.magic.every((byte, i) => data[i] === byte)) {
+      notice("icon-format", `The icon ${icon.path} is not a ${format.type === "image/png" ? "PNG" : "JPEG"} file, whatever its name says, so it is not shown.`);
     } else {
-      notice("icon-missing", `The icon ${iconPath} is not in the .xpi, or is not a PNG, SVG or JPEG.`);
+      result.icon = { path: icon.path, type: format.type, data };
     }
   }
 

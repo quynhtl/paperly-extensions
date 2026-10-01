@@ -23,7 +23,8 @@ test("the template builds, and passes the marketplace's checks with nothing to r
   const result = inspectXpi(data, { listing, config });
   assert.equal(result.ok, true);
   assert.deepEqual(result.findings, []);
-  assert.equal(result.icon.type, "image/svg+xml");
+  assert.equal(result.icon.type, "image/png");
+  assert.equal(result.icon.path, "icon-96.png");
 });
 
 test("every place that names the marketplace names the one in registry.json", () => {

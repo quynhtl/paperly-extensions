@@ -22,7 +22,7 @@ function startup({ id, rootURI }) {
     pluginID: id,
     id: "recent",
     label: "Hello Paperly",
-    icon: rootURI + "icon.svg",
+    icon: rootURI + "icon-96.png",
     onRender({ body }) {
       return render(body);
     },

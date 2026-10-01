@@ -41,13 +41,18 @@ export function manifest(overrides = {}) {
   };
 }
 
+/** Bytes that start the way a PNG does, which is all the checks look at. */
+export function png(text = "") {
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from(text)]);
+}
+
 /** An .xpi from a manifest and extra files; `null` for a file leaves it out. */
 export function xpi({ manifest: m = manifest(), files = {} } = {}) {
   const all = {
     "manifest.json": JSON.stringify(m),
     "bootstrap.js": "function startup() {}\nfunction shutdown() {}\n",
-    "icon-48.png": Buffer.from("png48"),
-    "icon-96.png": Buffer.from("png96"),
+    "icon-48.png": png("48"),
+    "icon-96.png": png("96"),
     ...files,
   };
   return writeZip(

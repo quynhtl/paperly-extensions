@@ -91,7 +91,7 @@ Every version, before it is published
 | --- | --- | --- |
 | not a readable `.xpi`, or over 20 MB | code that reads cookies, passwords or keys, starts programs, uses the clipboard or writes files without the listing declaring it | web addresses in the code that the listing doesn't declare |
 | `manifest.json` missing, invalid, or not `manifest_version` 2 | a version that doesn't run in the current Paperly | code built from text while running (`eval`, `new Function`) |
-| a file of code over 8 MB, too large to check | | an SVG icon over 256 KB, or one that is more than a drawing (scripts, event handlers, HTML, links, styles or images from elsewhere, a `<style>` holding comments or elements, a DOCTYPE or entities), which is then not shown |
+| a file of code over 8 MB, too large to check | | an icon that is not a PNG or JPEG (an SVG, say), is not the format its name says, or is over 512 KB, which is then not shown |
 | an id other than the listing's | `sendsContent` without a `privacyPolicy` | |
 | an `update_url` other than the marketplace's | | |
 | no `strict_min_version`/`strict_max_version`, or no `bootstrap.js` | | |
@@ -179,7 +179,7 @@ reads (see [scripts/lib/build.mjs](scripts/lib/build.mjs)):
 | `index.json.sig` | ECDSA P-256 signature of `index.json`. Paperly refuses an index it cannot verify. |
 | `files/<id>/<id>-<version>.xpi` | The checked copy of each version, which is what people install. |
 | `updates/<id>.json` | The update manifest each extension's `update_url` points at. |
-| `icons/<id>.png`, `.svg` or `.jpg` | The newest version's icon from its `manifest.json` (the smallest of 64px or more, else the largest), in its own format. |
+| `icons/<id>.png` or `.jpg` | The newest version's icon from its `manifest.json`: of its PNG and JPEG icons, the smallest of 64px or more, else the largest. SVG icons are never re-hosted, since one opened from the marketplace's address would run its scripts there. |
 | `report.json` | What was accepted and rejected, and why. |
 
 To try an extension in a local marketplace before releasing it, first write

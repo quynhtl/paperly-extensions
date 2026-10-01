@@ -6,7 +6,8 @@
   "author": "Your name",
   "homepage_url": "https://github.com/your-name/hello-paperly",
   "icons": {
-    "96": "icon.svg"
+    "48": "icon-48.png",
+    "96": "icon-96.png"
   },
   "applications": {
     "zotero": {

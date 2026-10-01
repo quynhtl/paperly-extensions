@@ -8,7 +8,7 @@ yours.
 ```
 src/manifest.json   who the extension is
 src/bootstrap.js    what it does
-src/icon.svg        how it looks in the marketplace
+src/icon-*.png      how it looks in the marketplace (PNG or JPEG)
 scripts/build.mjs   makes dist/<id>-<version>.xpi
 types/paperly.d.ts  Paperly's API, for TypeScript and editors
 ```

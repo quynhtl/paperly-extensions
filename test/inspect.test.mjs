@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { inspectXpi } from "../scripts/lib/inspect.mjs";
 import { compareVersions, isCompatible } from "../scripts/lib/version.mjs";
-import { config, listing, manifest, xpi } from "./helpers.mjs";
+import { config, listing, manifest, xpi, png } from "./helpers.mjs";
 
 const codes = (result, level) => result.findings.filter((f) => !level || f.level === level).map((f) => f.code);
 
@@ -87,91 +87,37 @@ test("code too large to scan is refused without being read, and a broken archive
   assert.deepEqual(codes(inspectXpi(bytes, { listing: listing(), config }), "error"), ["unreadable"]);
 });
 
-const withIcon = (svg) =>
-  inspectXpi(xpi({ manifest: manifest({ icons: { 96: "icon.svg" } }), files: { "icon.svg": svg } }), {
-    listing: listing(),
-    config,
-  });
+const withIcons = (icons, files) =>
+  inspectXpi(xpi({ manifest: manifest({ icons }), files }), { listing: listing(), config });
 
-test("an SVG icon that is more than a picture is not shown", () => {
-  const unsafe = [
-    '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>',
-    '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div/></foreignObject></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:x="http://www.w3.org/2000/svg"><x:script>alert(1)</x:script></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a xlink:href="https://evil.example/"><rect/></a></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg"><a href="javascript:alert(1)"><rect/></a></svg>',
-    Buffer.from("\ufeff<svg><script>alert(1)</script></svg>", "utf16le"),
-    // Markup spelled with references, which the browser's parser expands.
-    '<?xml version="1.0"?><!DOCTYPE svg [<!ENTITY p "&#60;script&#62;alert(document.domain)&#60;/script&#62;">]><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">&p;</svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg"><a><animate attributeName="href" values="&#106;avascript:alert(1)"/><rect/></a></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg"><style><![CDATA[rect { fill: red }]]></style></svg>',
-    '<?xml version="1.0"?><?xml-stylesheet href="https://evil.example/s.css"?><svg xmlns="http://www.w3.org/2000/svg"/>',
-    '<?xml version="1.0" encoding="ISO-2022-JP"?><svg xmlns="http://www.w3.org/2000/svg"><title>\x1b$B\x1b(B</title></svg>',
-    // A declaration anywhere but at the very start, or too long to be read.
-    '<svg xmlns="http://www.w3.org/2000/svg"><?xml version="1.0" encoding="ISO-2022-JP"?></svg>',
-    ' <?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"/>',
-    `<?xml version="1.0"${" ".repeat(300)}?><svg xmlns="http://www.w3.org/2000/svg"/>`,
-    // Elements that are not drawing, and resources from elsewhere.
-    '<svg xmlns="http://www.w3.org/2000/svg"><set attributeName="fill" to="red"/></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:h="http://www.w3.org/1999/xhtml"><h:iframe/></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg"><rect style="fill: url(https://evil.example/track)"/></svg>',
-    // CSS that fetches with no "url(" written.
-    '<svg xmlns="http://www.w3.org/2000/svg"><style>@import "https://evil.example/a.css";</style></svg>',
-    `<svg xmlns="http://www.w3.org/2000/svg"><rect style="background-image:image-set('https://evil.example/p.png' 1x)"/></svg>`,
-    `<svg xmlns="http://www.w3.org/2000/svg"><rect style="background-image:-webkit-image-set('https://evil.example/p.png' 1x)"/></svg>`,
-    '<svg xmlns="http://www.w3.org/2000/svg"><rect style="background-image:src(\'https://evil.example/p.png\')"/></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg"><style>@\\69mport "https://evil.example/a.css";</style></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="u\\72l(https://evil.example/p.svg#a)"/></svg>',
-    // A name split by a comment or an element, which the stylesheet leaves out.
-    '<svg xmlns="http://www.w3.org/2000/svg"><style>@imp<!---->ort "https://evil.example/a.css";</style></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg"><style>rect { fill: ur<!---->l(https://evil.example/p.svg#a) }</style><rect width="9" height="9"/></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg"><style>rect { background-image: image-s<!---->et("https://evil.example/p.png" 1x) }</style><rect/></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg"><style>@imp<g/>ort "https://evil.example/a.css";</style></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:s="http://www.w3.org/2000/svg"><s:style media="a>b">rect { fill: ur<s:title>x</s:title>l(https://evil.example/p.svg#a) }</s:style><rect/></svg>',
-  ];
-  for (const svg of unsafe) {
-    const result = withIcon(svg);
-    assert.equal(result.ok, true);
-    assert.equal(result.icon, null, String(svg));
-    assert.ok(codes(result, "notice").includes("icon-unsafe"), String(svg));
-  }
-  const safe = [
-    '<svg xmlns="http://www.w3.org/2000/svg"><defs><path id="p" d="M0 0h9"/></defs><use href = "#p"/></svg>',
-    '<svg xmlns="http://www.w3.org/2000/svg"><style type="text/css">rect { fill: #c00 } /* red */</style><rect width="9" height="9"/></svg>',
-    [
-      '<?xml version="1.0" encoding="UTF-8" standalone="no"?>',
-      "<!-- Generator: a drawing program -->",
-      '<svg:svg xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">',
-      "<svg:title>Lines &amp; dots</svg:title>",
-      '<svg:linearGradient id="g"><svg:stop offset="0" stop-color="#fff"/></svg:linearGradient>',
-      '<svg:circle r="9" fill="url(#g)"/><svg:use xlink:href="#g"/>',
-      "</svg:svg>",
-    ].join("\n"),
-  ];
-  for (const svg of safe) {
-    const result = withIcon(svg);
-    assert.equal(result.icon?.type, "image/svg+xml", svg);
-    assert.deepEqual(result.findings, []);
-  }
+test("only PNG and JPEG icons are shown, and only when they are what they say", () => {
+  // An SVG served from the marketplace's own address would run its scripts there
+  const svgOnly = withIcons({ 96: "icon.svg" }, { "icon.svg": '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>' });
+  assert.equal(svgOnly.ok, true);
+  assert.equal(svgOnly.icon, null);
+  assert.deepEqual(codes(svgOnly), ["icon-format"]);
+
+  // With a PNG beside it, the PNG is shown
+  const both = withIcons({ 48: "icon.svg", 96: "icon-96.png" }, { "icon.svg": "<svg/>", "icon-96.png": png() });
+  assert.equal(both.icon.path, "icon-96.png");
+  assert.deepEqual(both.findings, []);
+
+  const jpeg = withIcons({ 64: "icon.jpg" }, { "icon.jpg": Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2]) });
+  assert.equal(jpeg.icon.type, "image/jpeg");
+
+  // An SVG, or a page, named .png
+  const disguised = withIcons({ 96: "icon.png" }, { "icon.png": "<svg><script>alert(1)</script></svg>" });
+  assert.equal(disguised.icon, null);
+  assert.deepEqual(codes(disguised), ["icon-format"]);
 });
 
-test("an SVG icon is checked quickly whatever it holds, and one over 256 KB is not shown", () => {
-  // "<?xml " with no ">" after it had a backtracking pattern go over the rest
-  // of the icon again from each one: seconds for the first, hours for a few
-  // megabytes, which deflate to a few kilobytes of .xpi.
-  for (const svg of [`<svg>${"<?xml ".repeat(40 * 1024)}`, "<?xml ".repeat(200 * 1000)]) {
-    const started = Date.now();
-    const result = withIcon(svg);
-    assert.ok(Date.now() - started < 1000, `took ${Date.now() - started} ms for ${svg.length} bytes`);
-    assert.equal(result.ok, true);
-    assert.equal(result.icon, null);
-  }
-
-  // A plain drawing, but too large to be checked.
-  const large = withIcon(`<svg xmlns="http://www.w3.org/2000/svg">${"<rect/>".repeat(40 * 1024)}</svg>`);
+test("an icon over 512 KB is not read, and a missing one is noted", () => {
+  const large = withIcons({ 96: "icon-96.png" }, { "icon-96.png": png("x".repeat(513 * 1024)) });
   assert.equal(large.icon, null);
   assert.deepEqual(codes(large), ["icon-too-large"]);
+
+  const missing = withIcons({ 96: "gone.png" }, {});
+  assert.deepEqual(codes(missing), ["icon-missing"]);
 });
 
 test("what the code uses is compared with what the listing declares", () => {

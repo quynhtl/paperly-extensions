@@ -58,7 +58,7 @@ are, and the user opens the view when they want it.
 | `pluginID` | Your extension's id, the `id` passed to `startup` |
 | `id` | Unique within your extension |
 | `label` | The view's title, and the button's tooltip |
-| `icon` | Optional. An image URL, such as `rootURI + "icon.svg"` |
+| `icon` | Optional. An image URL, such as `rootURI + "icon-96.png"` |
 | `onRender({ body, window })` | Draws the view into `body`, an empty HTML element. Called once in each Extensions window, the first time the view is shown there; may return a promise |
 | `onDestroy({ body, window })` | Optional. Called when that window closes or the view goes |
 
