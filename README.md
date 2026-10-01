@@ -111,6 +111,47 @@ and/or `maxVersion`. Paperly switches blocked versions off on every computer
 the next time it reads the index, and shows the reason. Only maintainers
 change this file.
 
+## What gets published
+
+`node scripts/build.mjs --out dist` turns the listings into the site Paperly
+reads (see [scripts/lib/build.mjs](scripts/lib/build.mjs)):
+
+| Path | |
+| --- | --- |
+| `index.json` | Every listed extension, its versions, what each was found to use, and the blocks. |
+| `index.json.sig` | ECDSA P-256 signature of `index.json`. Paperly refuses an index it cannot verify. |
+| `files/<id>/<id>-<version>.xpi` | The checked copy of each version, which is what people install. |
+| `updates/<id>.json` | The update manifest each extension's `update_url` points at. |
+| `icons/<id>.png` | Taken from the newest version's `manifest.json` icons. |
+| `report.json` | What was accepted and rejected, and why. |
+
+To try an extension in a local marketplace before releasing it:
+
+```sh
+node scripts/keygen.mjs                      # once; keep the private key in a file
+node scripts/build.mjs --out dist --base-url http://127.0.0.1:8765/ \
+  --key-file dev.key --local <id>=path/to/your.xpi
+python3 -m http.server 8765 -d dist
+```
+
+then point a test profile of Paperly at it (set
+`extensions.zotero.paperlyExtensions.registryURL` to the base URL and
+`extensions.zotero.paperlyExtensions.publicKey` to the public key). For this the
+`.xpi`'s `update_url` must use the local base URL too.
+
+## Setting up the marketplace
+
+Once, by a maintainer:
+
+1. `node scripts/keygen.mjs`. Put the private key in the repository's
+   **REGISTRY_SIGNING_KEY** Actions secret, and the public key in
+   paperly-client's `defaults/preferences/zotero.js`
+   (`extensions.zotero.paperlyExtensions.publicKey`).
+2. Turn on GitHub Pages with **GitHub Actions** as the source.
+3. If the site is not `https://quynhtl.github.io/paperly-extensions/`, change
+   `baseURL` in `registry.json` and `extensions.zotero.paperlyExtensions.registryURL`
+   in paperly-client to match.
+
 ## This repository
 
 | Path | |
@@ -120,5 +161,7 @@ change this file.
 | `registry.json` | Where the marketplace is published, and which Paperly version the checks assume. |
 | `POLICY.md` | The rules. |
 | `scripts/check.mjs` | Checks listings, and a built `.xpi` against its listing. |
+| `scripts/build.mjs` | Builds and signs the published site. |
+| `scripts/keygen.mjs` | Makes the signing key pair. |
 | `scripts/lib/` | The checks themselves, and a ZIP reader that never unpacks to disk. |
 | `test/` | `npm test`. |
