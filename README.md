@@ -40,12 +40,20 @@ its hash, so what they get is exactly what was checked.
    letters, digits, `.`, `_`, `@` and `-` replaced by `_`.
 3. **Publish a GitHub release** in a public repository, with the `.xpi`
    attached.
-4. **Open a pull request** adding `extensions/<id>.json` (below). It must
+4. **Check it** the way the marketplace will (Node 20 or later, nothing to
+   install):
+
+   ```sh
+   node scripts/check.mjs extensions/<id>.json --xpi path/to/your.xpi
+   ```
+
+5. **Open a pull request** adding `extensions/<id>.json` (below). It must
    come from the owner of the repository named in it.
 
 ## The listing file
 
-`extensions/<id>.json`, for example
+`extensions/<id>.json`, named with the same character rule as the update URL,
+for example
 [paperly-ai@paperly.org.json](extensions/paperly-ai@paperly.org.json):
 
 | Field | | |
@@ -60,6 +68,23 @@ its hash, so what they get is exactly what was checked.
 | `homepage` | optional | An `https://` page about the extension. |
 | `license` | optional | An SPDX id, such as `MIT` or `AGPL-3.0-or-later`. |
 | `privacyPolicy` | optional | An `https://` page; expected when `declares.sendsContent` is true. |
+
+## What is checked
+
+Every version, before it is published
+([scripts/lib/inspect.mjs](scripts/lib/inspect.mjs)):
+
+| Kept out of the marketplace | Shown as a warning | Shown in the details |
+| --- | --- | --- |
+| not a readable `.xpi`, or over 20 MB | code that reads cookies, passwords or keys, starts programs, uses the clipboard or writes files without the listing declaring it | web addresses in the code that the listing doesn't declare |
+| `manifest.json` missing, invalid, or not `manifest_version` 2 | a version that doesn't run in the current Paperly | code built from text while running (`eval`, `new Function`) |
+| an id other than the listing's | `sendsContent` without a `privacyPolicy` | |
+| an `update_url` other than the marketplace's | | |
+| no `strict_min_version`/`strict_max_version`, or no `bootstrap.js` | | |
+| code loaded from the internet, or obfuscated code | | |
+
+The checks read the code; they cannot prove an extension is safe. They are
+there so that what an extension does is visible before someone installs it.
 
 ## Updates
 
@@ -94,3 +119,6 @@ change this file.
 | `blocked.json` | The kill switch. |
 | `registry.json` | Where the marketplace is published, and which Paperly version the checks assume. |
 | `POLICY.md` | The rules. |
+| `scripts/check.mjs` | Checks listings, and a built `.xpi` against its listing. |
+| `scripts/lib/` | The checks themselves, and a ZIP reader that never unpacks to disk. |
+| `test/` | `npm test`. |
