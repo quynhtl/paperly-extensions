@@ -214,8 +214,24 @@ Once, by a maintainer:
    deletion. Everything published is built from `main`, so its history must
    only ever move forward.
 4. If the site is not `https://quynhtl.github.io/paperly-extensions/`, change
-   `baseURL` in `registry.json` and `extensions.zotero.paperlyExtensions.registryURL`
-   in paperly-client to match.
+   its address everywhere it is written, all together (`npm test` checks the
+   ones in this repository against `registry.json`):
+   - `baseURL` in `registry.json`;
+   - `MARKETPLACE` in `template/scripts/build.mjs`, and `update_url` in
+     `template/src/manifest.json`;
+   - the update URL in this README (step 2 of "List your extension") and in
+     `docs/getting-started.md`;
+   - in paperly-client's `defaults/preferences/zotero.js`,
+     `extensions.zotero.paperlyExtensions.registryURL`, and
+     `extensions.zotero.paperlyExtensions.publicKey` if the key changes too;
+   - `updateURL` in paperly-plugin's `zotero-plugin.config.ts`. Then rebuild
+     Paperly AI, publish the build as a new release, and bundle it into
+     paperly-client again: every copy asks for updates at the address it was
+     built with, the one installed with Paperly included.
+
+   Settle the address before anything built with it ships. A copy already
+   installed goes on asking the old address for updates, and GitHub Pages
+   does not redirect it.
 
 ## This repository
 

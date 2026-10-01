@@ -25,6 +25,17 @@ test("the template builds, and passes the marketplace's checks with nothing to r
   assert.equal(result.icon.type, "image/svg+xml");
 });
 
+test("every place that names the marketplace names the one in registry.json", () => {
+  // Changing the address in one place and not the others breaks publishing,
+  // or has developers ship update URLs the checks refuse.
+  const { baseURL } = loadConfig();
+  const manifest = JSON.parse(readFileSync(join(SRC, "manifest.json"), "utf8"));
+  assert.ok(manifest.applications.zotero.update_url.startsWith(`${baseURL}updates/`), "template/src/manifest.json");
+  for (const file of ["README.md", "docs/getting-started.md"]) {
+    assert.ok(readFileSync(new URL(`../${file}`, import.meta.url), "utf8").includes(`${baseURL}updates/`), file);
+  }
+});
+
 test("the same source makes the same bytes", () => {
   assert.deepEqual(buildXpi(SRC).data, buildXpi(SRC).data);
 });
