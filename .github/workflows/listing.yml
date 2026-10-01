@@ -24,6 +24,7 @@ concurrency:
 jobs:
   review:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,18 +35,26 @@ jobs:
         with:
           node-version: 22
 
+      # The review covers the commit this event names and nothing else: a push
+      # that touches no listing starts no new run, so without the pin a commit
+      # pushed while the check runs would be merged unchecked.
       - id: review
         run: node scripts/review-pr.mjs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
 
-      # A merge made with GITHUB_TOKEN starts no workflows of its own, so the
-      # publish run is asked for explicitly.
+      # --match-head-commit makes GitHub refuse the merge if the pull request
+      # has moved on from the commit that was checked. A merge made with
+      # GITHUB_TOKEN starts no workflows of its own, so the publish run is
+      # asked for explicitly.
       - if: steps.review.outputs.merge == 'true'
         run: |
-          gh pr merge "$PR_NUMBER" --squash --repo "$GITHUB_REPOSITORY"
+          gh pr merge "$PR_NUMBER" --squash --match-head-commit "$SHA" --repo "$GITHUB_REPOSITORY"
           gh workflow run publish.yml --repo "$GITHUB_REPOSITORY"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          SHA: ${{ steps.review.outputs.sha }}

@@ -175,7 +175,9 @@ otherwise the add-on manager installs the extension but keeps it disabled.
 | [test.yml](.github/workflows/test.yml) | Every pull request and push | `npm test` and every listing. |
 
 `listing.yml` holds a token that can write to this repository, so it runs only
-the base branch's scripts and reads the pull request's listings as data.
+the base branch's scripts and reads the pull request's listings as data. It
+checks the one commit the pull request's event named, and merges only that
+commit: if anything is pushed while the check runs, nothing is merged.
 
 ## Setting up the marketplace
 
@@ -184,9 +186,14 @@ Once, by a maintainer:
 1. `node scripts/keygen.mjs`. Put the private key in the repository's
    **REGISTRY_SIGNING_KEY** Actions secret, and the public key in
    paperly-client's `defaults/preferences/zotero.js`
-   (`extensions.zotero.paperlyExtensions.publicKey`).
+   (`extensions.zotero.paperlyExtensions.publicKey`). Keep the private key
+   only in that secret, and delete every other copy once it is saved there:
+   whoever has it can tell every copy of Paperly what to install.
 2. Turn on GitHub Pages with **GitHub Actions** as the source.
-3. If the site is not `https://quynhtl.github.io/paperly-extensions/`, change
+3. Protect `main` (Settings, Branches, or Rules): no force-pushes, and no
+   deletion. Everything published is built from `main`, so its history must
+   only ever move forward.
+4. If the site is not `https://quynhtl.github.io/paperly-extensions/`, change
    `baseURL` in `registry.json` and `extensions.zotero.paperlyExtensions.registryURL`
    in paperly-client to match.
 
