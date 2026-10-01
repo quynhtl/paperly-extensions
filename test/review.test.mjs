@@ -20,7 +20,7 @@ const verifyPublisher = async (l) =>
     ? { verified: true, domain: l.publisherDomain, problem: null }
     : { verified: false, domain: l.publisherDomain, problem: "answered 404." };
 
-function review({ author = "someone", files, head = {}, base = {}, checkRelease = passing, repos = REPOS }) {
+function review({ author = "someone", files, head = {}, base = {}, checkRelease = passing, repos = REPOS, budgetLeft }) {
   return reviewSubmission({
     author: { login: author, id: USERS[author] },
     files,
@@ -29,6 +29,7 @@ function review({ author = "someone", files, head = {}, base = {}, checkRelease 
     resolveRepo: async (id) => repos[id] ?? null,
     verifyPublisher,
     checkRelease,
+    budgetLeft,
   });
 }
 
@@ -228,6 +229,37 @@ test("a pull request touching more than ten files waits for a maintainer, unchec
   assert.equal(result.merge, false);
   assert.match(result.markdown, /changes 11 files/);
   assert.equal(asked, 0);
+});
+
+test("a check stops asking GitHub once the budget runs low, and does not merge", async () => {
+  const OTHER = "extensions/other@someone.github.io.json";
+  const read = [];
+  let released = 0;
+  let asked = 0;
+  const result = await reviewSubmission({
+    author: { login: "someone", id: USERS.someone },
+    files: [
+      { filename: PATH, status: "added" },
+      { filename: OTHER, status: "added" },
+    ],
+    readHead: async (path) => {
+      read.push(path);
+      return path === PATH ? text() : JSON.stringify(listing({ id: "other@someone.github.io" }));
+    },
+    readBase: async () => null,
+    resolveRepo: async (id) => REPOS[id] ?? null,
+    verifyPublisher,
+    checkRelease: async () => {
+      released++;
+      return passing();
+    },
+    // Enough for the first listing, but not for its release.
+    budgetLeft: () => asked++ < 1,
+  });
+  assert.equal(result.merge, false);
+  assert.match(result.markdown, /⏳ GitHub's budget of requests .* is running low/);
+  assert.equal(released, 0);
+  assert.deepEqual(read, [PATH]);
 });
 
 test("the release of a listing that already failed is not checked", async () => {

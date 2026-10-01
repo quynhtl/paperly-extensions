@@ -30,8 +30,9 @@ import { validateListing } from "./listing.mjs";
 const LISTING_PATH = /^extensions\/[^/]+\.json$/;
 
 /**
- * Every listing costs a few GitHub requests, from a budget the publish runs
- * share; a pull request touching more is left to a maintainer.
+ * Every listing costs a few GitHub requests, from a budget the merge step
+ * shares (see budgetLeft below); a pull request touching more is left to a
+ * maintainer.
  */
 const MAX_FILES = 10;
 
@@ -72,13 +73,24 @@ function parse(text) {
  * type } }, or null), `verifyPublisher(listing)` checks its publisherDomain
  * ({ verified, problem }, see verify.mjs), and `checkRelease(listing)` checks
  * the newest release ({ ok, label, version, findings } or { ok: false,
- * problem }).
+ * problem }). `budgetLeft()` says whether GitHub's budget of requests allows
+ * asking more; once it does not, the rest is left unchecked, for a later
+ * push or a maintainer.
  *
  * Returns whether to merge, and the Markdown for the pull request comment.
  * What is marked ❌ is for the author to fix; what is marked ⏳ is not wrong,
  * but is for a maintainer to decide.
  */
-export async function reviewSubmission({ author, files, readHead, readBase, resolveRepo, verifyPublisher, checkRelease }) {
+export async function reviewSubmission({
+  author,
+  files,
+  readHead,
+  readBase,
+  resolveRepo,
+  verifyPublisher,
+  checkRelease,
+  budgetLeft = () => true,
+}) {
   const lines = [];
   let merge = files.length > 0;
   let failures = 0;
@@ -93,6 +105,16 @@ export async function reviewSubmission({ author, files, readHead, readBase, reso
     lines.push(`- ⏳ ${text}`);
     merge = false;
     waiting++;
+  };
+  let spent = false;
+  /** Whether more may be asked of GitHub; says once when it may not. */
+  const canAsk = () => {
+    if (!spent && !budgetLeft()) {
+      spent = true;
+      lines.push("");
+      wait("GitHub's budget of requests for this repository is running low, so the rest is not checked now. Push again in an hour, or wait for a maintainer.");
+    }
+    return !spent;
   };
 
   async function checkOwner(listing, verb) {
@@ -146,6 +168,9 @@ export async function reviewSubmission({ author, files, readHead, readBase, reso
   }
 
   for (const file of files) {
+    if (!canAsk()) {
+      break;
+    }
     const failuresBefore = failures;
     lines.push("", `**${code(file.filename)}**, ${file.status}`);
     if (!LISTING_PATH.test(file.filename) || (file.previousFilename && !LISTING_PATH.test(file.previousFilename))) {
@@ -198,6 +223,9 @@ export async function reviewSubmission({ author, files, readHead, readBase, reso
       continue;
     }
 
+    if (!canAsk()) {
+      break;
+    }
     const release = await checkRelease(listing);
     const show = (findings, line) => {
       for (const f of findings.slice(0, MAX_FINDINGS)) {

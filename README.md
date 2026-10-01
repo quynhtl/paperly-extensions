@@ -227,11 +227,19 @@ Once, by a maintainer:
    (`extensions.zotero.paperlyExtensions.publicKey`). Keep the private key
    only in that secret, and delete every other copy once it is saved there:
    whoever has it can tell every copy of Paperly what to install.
-2. Turn on GitHub Pages with **GitHub Actions** as the source.
-3. Protect `main` (Settings, Branches, or Rules): no force-pushes, and no
+2. Give publishing a GitHub token of its own: a fine-grained personal access
+   token with **Public repositories (read-only)** access and no permissions,
+   in the **PUBLISH_GITHUB_TOKEN** Actions secret. Without it, the build uses
+   the workflow's `GITHUB_TOKEN`, whose budget of 1,000 requests an hour is
+   shared with the checks of pull requests; anyone opening enough of them
+   could spend it, and a build GitHub stops answering deploys nothing, new
+   blocks included. Renew the token before it expires: publishing stops when
+   it does.
+3. Turn on GitHub Pages with **GitHub Actions** as the source.
+4. Protect `main` (Settings, Branches, or Rules): no force-pushes, and no
    deletion. Everything published is built from `main`, so its history must
    only ever move forward.
-4. If the site is not `https://quynhtl.github.io/paperly-extensions/`, change
+5. If the site is not `https://quynhtl.github.io/paperly-extensions/`, change
    its address everywhere it is written, all together (`npm test` checks the
    ones in this repository against `registry.json`):
    - `baseURL` in `registry.json`;

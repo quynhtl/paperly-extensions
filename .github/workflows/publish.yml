@@ -32,10 +32,19 @@ jobs:
 
       - run: npm test
 
-      - run: node scripts/build.mjs --out dist
+      # The build asks GitHub with a token of its own, PUBLISH_GITHUB_TOKEN,
+      # when there is one. GITHUB_TOKEN's budget of requests is shared with
+      # the checks of pull requests, which anyone can open: spent, the build
+      # stops, and deploys nothing, new blocks included.
+      - run: |
+          if [ "$OWN_TOKEN" != true ]; then
+            echo "::warning::PUBLISH_GITHUB_TOKEN is not set, so publishing shares GITHUB_TOKEN's request budget with pull request checks. See the README, Setting up the marketplace."
+          fi
+          node scripts/build.mjs --out dist
         env:
           REGISTRY_SIGNING_KEY: ${{ secrets.REGISTRY_SIGNING_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          OWN_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN != '' }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

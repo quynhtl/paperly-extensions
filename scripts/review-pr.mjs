@@ -28,8 +28,30 @@ const MARKER = "<!-- paperly-marketplace-check -->";
 const BOT = "github-actions[bot]";
 const config = loadConfig();
 
+/**
+ * The checks of every pull request, which anyone can open, spend one budget
+ * of API requests an hour for this repository, which the merge step needs
+ * too, and so does publishing when it has no token of its own (see
+ * publish.yml). A check stops asking once a quarter of it is left, so that
+ * pull requests cannot spend it all.
+ */
+const budget = { remaining: Infinity, limit: Infinity };
+const budgetLeft = () => budget.remaining > budget.limit / 4;
+
+/** fetch, noting how much of the budget GitHub says is left. */
+async function apiFetch(url, options) {
+  const response = await fetch(url, options);
+  const remaining = Number(response.headers.get("x-ratelimit-remaining") ?? NaN);
+  const limit = Number(response.headers.get("x-ratelimit-limit") ?? NaN);
+  if (remaining >= 0 && limit > 0) {
+    budget.remaining = remaining;
+    budget.limit = limit;
+  }
+  return response;
+}
+
 async function api(path, { method = "GET", body } = {}) {
-  const response = await fetch(`https://api.github.com${path}`, {
+  const response = await apiFetch(`https://api.github.com${path}`, {
     method,
     headers: {
       Accept: "application/vnd.github+json",
@@ -68,10 +90,11 @@ async function readFile(repo, path, ref) {
 async function finish(markdown, merge) {
   // One comment per pull request, updated on every push. Only the bot's own:
   // anyone can post a comment that starts with the marker, and the bot must
-  // not take theirs over (or be kept from posting by it).
+  // not take theirs over (or be kept from posting by it). With the budget
+  // low, a new comment is posted rather than more pages read.
   const body = `${MARKER}\n${markdown}`;
   let previous = null;
-  for (let page = 1; !previous && page <= 30; page++) {
+  for (let page = 1; !previous && page <= 30 && (page === 1 || budgetLeft()); page++) {
     const batch = await json(`/repos/${registry}/issues/${number}/comments?per_page=100&page=${page}`);
     previous = batch.find((c) => c.user?.login === BOT && c.body?.startsWith(MARKER)) ?? null;
     if (batch.length < 100) {
@@ -130,12 +153,13 @@ const review = await reviewSubmission({
   files,
   readHead: (path) => readFile(pr.head.repo.full_name, path, HEAD_SHA),
   readBase: (path) => readFile(registry, path, pr.base.sha),
-  resolveRepo: (repoId) => repoById(repoId, { token }),
+  resolveRepo: (repoId) => repoById(repoId, { token, fetch: apiFetch }),
   verifyPublisher,
+  budgetLeft,
   async checkRelease(listing) {
     let releases;
     try {
-      releases = await listReleases(listing.repoId, { token });
+      releases = await listReleases(listing.repoId, { token, fetch: apiFetch });
     } catch (e) {
       return { ok: false, problem: e.message };
     }
