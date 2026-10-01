@@ -47,6 +47,8 @@ test("anything short of the repository in the file leaves the publisher unverifi
     [fakeFetch("", 404), /answered 404/],
     [fakeFetch(new TypeError("redirect mode is set to error")), /could not be fetched/],
     [fakeFetch("x".repeat(70 * 1024)), /larger than/],
+    // Entries that are not names, one of which String() cannot convert.
+    [fakeFetch(JSON.stringify({ repos: [{ toString: 1 }, ["someone/hello"], null] })), /does not list someone\/hello/],
   ];
   for (const [{ fetch }, reason] of cases) {
     const result = await verifyPublisher(withDomain, { fetch });

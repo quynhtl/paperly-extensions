@@ -73,7 +73,11 @@ export async function verifyPublisher(listing, { fetch = globalThis.fetch, timeo
   } catch {
     return fail(`${WELL_KNOWN_PATH} on ${domain} is not valid JSON.`);
   }
-  const repos = Array.isArray(proof?.repos) ? proof.repos.map((r) => String(r).toLowerCase()) : [];
+  // Strings only: whoever runs the domain writes this file, and String() of
+  // an object such as {"toString": 1} throws instead of giving a name.
+  const repos = Array.isArray(proof?.repos)
+    ? proof.repos.filter((r) => typeof r === "string").map((r) => r.toLowerCase())
+    : [];
   if (!repos.includes(listing.repo.toLowerCase())) {
     return fail(`${WELL_KNOWN_PATH} on ${domain} does not list ${listing.repo}.`);
   }
