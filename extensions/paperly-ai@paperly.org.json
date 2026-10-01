@@ -1,0 +1,26 @@
+{
+  "id": "paperly-ai@paperly.org",
+  "name": "Paperly AI",
+  "publisher": "Paperly",
+  "description": "An AI panel beside the reader, a reading status you can tick from the item list, a starred collection, and a floating bot.",
+  "repo": "quynhtl/Paperly-ai",
+  "homepage": "https://github.com/quynhtl/Paperly-ai#readme",
+  "categories": ["ai", "reading"],
+  "declares": {
+    "network": [
+      "chat.deepseek.com",
+      "chat.z.ai",
+      "chatgpt.com",
+      "claude.ai",
+      "gemini.google.com",
+      "notebooklm.google.com",
+      "dictionary.cambridge.org",
+      "translate.google.com",
+      "www.google.com"
+    ],
+    "sendsContent": true,
+    "clipboard": true,
+    "files": true,
+    "cookies": true
+  }
+}

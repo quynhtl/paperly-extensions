@@ -1,0 +1,12 @@
+{
+  "name": "paperly-extensions",
+  "private": true,
+  "type": "module",
+  "description": "The Paperly extension marketplace: who is listed, what every version was checked for, and the signed index the app reads.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  }
+}

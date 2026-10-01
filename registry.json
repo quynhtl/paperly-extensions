@@ -1,0 +1,7 @@
+{
+  "baseURL": "https://quynhtl.github.io/paperly-extensions/",
+  "appVersion": "11.0",
+  "officialOwners": ["quynhtl"],
+  "versionsKept": 5,
+  "maxXpiBytes": 20971520
+}
