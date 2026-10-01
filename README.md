@@ -239,6 +239,9 @@ Once, by a maintainer:
      Paperly AI, publish the build as a new release, and bundle it into
      paperly-client again: every copy asks for updates at the address it was
      built with, the one installed with Paperly included.
+   - if this repository itself is renamed or moved, the links to it in
+     `template/README.md`, which is copied out of this repository and so
+     links here in full.
 
    Settle the address before anything built with it ships. A copy already
    installed goes on asking the old address for updates, and GitHub Pages

@@ -49,6 +49,13 @@ test("the template builds for a local test marketplace without its source changi
   assert.equal(result.manifest.applications.zotero.update_url, `${local}updates/${slug(id)}.json`);
 });
 
+test("the template's README links in full, since it is copied out of this repository", () => {
+  const readme = readFileSync(new URL("../template/README.md", import.meta.url), "utf8");
+  for (const [, target] of readme.matchAll(/\]\(([^)]+)\)/g)) {
+    assert.match(target, /^https:\/\//, target);
+  }
+});
+
 test("the same source makes the same bytes", () => {
   assert.deepEqual(buildXpi(SRC).data, buildXpi(SRC).data);
 });
