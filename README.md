@@ -178,7 +178,7 @@ Once, by a maintainer:
 | `registry.json` | Where the marketplace is published, and which Paperly version the checks assume. |
 | `POLICY.md` | The rules. |
 | `template/` | A starting point for a new extension, with its own build script. |
-| `docs/` | Getting started, and the API an extension can use. |
+| `docs/` | [Getting started](docs/getting-started.md), and [the API](docs/api.md) an extension can use. |
 | `scripts/check.mjs` | Checks listings, and a built `.xpi` against its listing. |
 | `scripts/build.mjs` | Builds and signs the published site. |
 | `scripts/keygen.mjs` | Makes the signing key pair. |

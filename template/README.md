@@ -1,14 +1,16 @@
 # Hello Paperly
 
 A starting point for a Paperly extension: a view in Paperly's Extensions
-window that lists what was added to the library last. Copy this folder into a
-repository of your own and make it yours.
+window that shows what is selected in the main window and lists what was added
+to the library last. Copy this folder into a repository of your own and make it
+yours.
 
 ```
 src/manifest.json   who the extension is
 src/bootstrap.js    what it does
 src/icon.svg        how it looks in the marketplace
 scripts/build.mjs   makes dist/<id>-<version>.xpi
+types/paperly.d.ts  Paperly's API, for TypeScript and editors
 ```
 
 1. **Choose an id** in `src/manifest.json`, such as `my-extension@your-domain`.

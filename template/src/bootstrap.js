@@ -38,7 +38,10 @@ function shutdown() {
   }
 }
 
-/** Draws the view: the five items most recently added to My Library. */
+/**
+ * Draws the view: what is selected in Paperly's main window, and the five
+ * items most recently added to My Library.
+ */
 async function render(body) {
   const doc = body.ownerDocument;
   const html = (tag, text) => {
@@ -48,6 +51,22 @@ async function render(body) {
     }
     return element;
   };
+
+  // What the user is working on: getContext() reads the main window as it is
+  // now, so the view asks again whenever the button is pressed
+  const selection = html("p");
+  const showSelection = html("button", "What is selected?");
+  showSelection.addEventListener("click", () => {
+    const { items, reader } = Zotero.PaperlyExtensions.getContext();
+    if (reader?.selectedText) {
+      selection.textContent = `Selected in ${items[0]?.getDisplayTitle()}: “${reader.selectedText}”`;
+    } else {
+      selection.textContent = items.length
+        ? `Selected: ${items.map((item) => item.getDisplayTitle()).join("; ")}`
+        : "Nothing is selected in the main window.";
+    }
+  });
+  body.append(showSelection, selection);
 
   const list = html("ol");
   const refresh = html("button", "Refresh");
