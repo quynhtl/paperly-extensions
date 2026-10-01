@@ -139,6 +139,17 @@ then point a test profile of Paperly at it (set
 `extensions.zotero.paperlyExtensions.publicKey` to the public key). For this the
 `.xpi`'s `update_url` must use the local base URL too.
 
+## What runs on GitHub
+
+| Workflow | When | What |
+| --- | --- | --- |
+| [listing.yml](.github/workflows/listing.yml) | A pull request touches `extensions/` | Checks the listings and the newest release of each, comments with the result, and merges when everything passes and the author owns every repository involved ([scripts/lib/review.mjs](scripts/lib/review.mjs)). Anything else waits for a maintainer. |
+| [publish.yml](.github/workflows/publish.yml) | Push to `main`, every three hours, or by hand | Builds, signs and deploys the site to GitHub Pages. |
+| [test.yml](.github/workflows/test.yml) | Every pull request and push | `npm test` and every listing. |
+
+`listing.yml` holds a token that can write to this repository, so it runs only
+the base branch's scripts and reads the pull request's listings as data.
+
 ## Setting up the marketplace
 
 Once, by a maintainer:
@@ -163,5 +174,6 @@ Once, by a maintainer:
 | `scripts/check.mjs` | Checks listings, and a built `.xpi` against its listing. |
 | `scripts/build.mjs` | Builds and signs the published site. |
 | `scripts/keygen.mjs` | Makes the signing key pair. |
+| `scripts/review-pr.mjs` | Reviews a pull request in GitHub Actions. |
 | `scripts/lib/` | The checks themselves, and a ZIP reader that never unpacks to disk. |
 | `test/` | `npm test`. |

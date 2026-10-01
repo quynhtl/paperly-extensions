@@ -1,0 +1,51 @@
+name: Check listing
+
+# Runs on pull requests that touch listings, including ones from forks, and
+# merges those that pass (see scripts/lib/review.mjs).
+#
+# pull_request_target gives this job a token that can write to the repository,
+# so it must never run code from the pull request. It checks out the base
+# branch, and scripts/review-pr.mjs reads the pull request's listings through
+# the API as plain JSON.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths: ["extensions/**"]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: listing-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - id: review
+        run: node scripts/review-pr.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+
+      # A merge made with GITHUB_TOKEN starts no workflows of its own, so the
+      # publish run is asked for explicitly.
+      - if: steps.review.outputs.merge == 'true'
+        run: |
+          gh pr merge "$PR_NUMBER" --squash --repo "$GITHUB_REPOSITORY"
+          gh workflow run publish.yml --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
