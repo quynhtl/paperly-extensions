@@ -28,8 +28,8 @@ const MAX_ENTRY_BYTES = 64 * 1024;
 
 /**
  * The most index.json may take. Paperly gives up on a download after 30
- * seconds, and with the index it would lose every new block. Past this, the
- * largest extensions are left out until the rest fit.
+ * seconds, and with the index it would lose every new block. Past this,
+ * extensions are left out, by owner, until the rest fit.
  */
 const MAX_INDEX_BYTES = 8 * 1024 * 1024;
 
@@ -144,7 +144,8 @@ function discard(out, id) {
  * hold back every other extension's updates, and blocked.json with them.
  *
  * Nor can many of them: an index.json too large to publish leaves out the
- * largest extensions until the rest fit, each saying so in the report.
+ * extensions of whoever takes the most of it, owner by owner and never an
+ * official one, until the rest fit, each saying so in the report.
  * Anyone can have listings merged, as many as they have repositories, each
  * as large as the checks allow; were that to stop the build, one account
  * could hold back every block.
@@ -356,32 +357,48 @@ export async function buildRegistry({
   // never re-serialised.
   let bytes = Buffer.from(JSON.stringify(index));
   if (bytes.length > MAX_INDEX_BYTES) {
-    // Largest first, so that whoever made the index too large is who is left
-    // out, and to leave out as few as can be.
+    // Left out by who added the bytes, not by the size of one entry: an
+    // owner's extensions go together, the owner with the most first. Ranked
+    // by single entries, a flood of listings each a little smaller than
+    // someone else's would push that one out, at no cost to the flood.
+    // Official extensions are never left out.
     const sizes = new Map(extensions.map((e) => [e, Buffer.byteLength(JSON.stringify(e))]));
-    const largest = [...extensions].sort((a, b) => sizes.get(b) - sizes.get(a) || a.id.localeCompare(b.id));
+    const official = new Set(config.officialOwners.map((o) => o.toLowerCase()));
+    const owners = new Map();
+    for (const extension of extensions) {
+      const owner = String(extension.publisher.github).toLowerCase();
+      if (!official.has(owner)) {
+        const group = owners.get(owner) ?? { owner, extensions: [], bytes: 0 };
+        group.extensions.push(extension);
+        group.bytes += sizes.get(extension);
+        owners.set(owner, group);
+      }
+    }
+    const heaviest = [...owners.values()].sort((a, b) => b.bytes - a.bytes || a.owner.localeCompare(b.owner));
     const left = new Set();
     let size = bytes.length;
-    for (const extension of largest) {
+    for (const group of heaviest) {
       if (size <= MAX_INDEX_BYTES) {
         break;
       }
-      const entry = reported.get(extension);
-      entry.problems.push(
-        `Left out: index.json would be over the ${mb(MAX_INDEX_BYTES)} Paperly can be relied on to download, and at ${kb(sizes.get(extension))} this was the largest extension in it.`,
-      );
-      entry.listed = false;
-      entry.versions = [];
-      discard(out, extension.id);
-      left.add(extension);
-      // Its entry, and the comma between it and the next.
-      size -= sizes.get(extension) + (left.size < extensions.length ? 1 : 0);
+      for (const extension of group.extensions) {
+        const entry = reported.get(extension);
+        entry.problems.push(
+          `Left out: index.json would be over the ${mb(MAX_INDEX_BYTES)} Paperly can be relied on to download, and ${group.owner}'s ${group.extensions.length} extension(s), at ${kb(group.bytes)} together, took the most of it.`,
+        );
+        entry.listed = false;
+        entry.versions = [];
+        discard(out, extension.id);
+        left.add(extension);
+        // Its entry, and the comma between it and the next.
+        size -= sizes.get(extension) + 1;
+      }
     }
     index.extensions = extensions.filter((e) => !left.has(e));
     bytes = Buffer.from(JSON.stringify(index));
     if (bytes.length > MAX_INDEX_BYTES) {
       const e = new Error(
-        `index.json would take ${mb(bytes.length)} with no extension listed, over the ${mb(MAX_INDEX_BYTES)} Paperly can be relied on to download; blocked.json must be made smaller.`,
+        `index.json would take ${mb(bytes.length)} with only the official extensions and the blocks in it, over the ${mb(MAX_INDEX_BYTES)} Paperly can be relied on to download; blocked.json, or an official listing, must be made smaller.`,
       );
       e.fatal = true;
       throw e;

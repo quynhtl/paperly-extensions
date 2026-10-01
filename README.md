@@ -188,9 +188,11 @@ Each version names at most 100 of the web addresses found in its code, and
 no more than 4 KB of them, with a count of the rest. An extension whose entry
 in `index.json`, or whose update manifest, would take over 64 KB is left out,
 and the report says so. If `index.json` would still take over 8 MB, more than
-Paperly can be relied on to download, the largest extensions are left out
-until it does not, and the report says so for each; the blocks are never left
-out, and if they alone are too large the build stops.
+Paperly can be relied on to download, extensions are left out owner by
+owner, starting with the owner whose extensions take the most of it, until it
+does not; the report says so for each, and the run shows a warning. Official
+extensions and the blocks are never left out, and if they alone are too large
+the build stops.
 
 To try an extension in a local marketplace before releasing it, first write
 its listing, `extensions/<id>.json`: only listed extensions are built. (For a

@@ -285,6 +285,35 @@ test("an extension too large for the index is left out", async () => {
   assert.equal(existsSync(join(out, "files/hello@example.com")), false);
 });
 
+test("an index too large leaves out whoever takes the most of it, never an official extension", async () => {
+  // One official extension, and a flood of smaller listings from one owner
+  const tool = (id) => xpi({
+    manifest: manifest({ zotero: { id, update_url: `https://registry.test/updates/${id}.json` } }),
+    files: { "content/a.js": Array.from({ length: 30 }, (_, i) => `fetch("https://${"h".repeat(60)}${i}.example.net/");`).join("\n") },
+  });
+  const flood = Array.from({ length: 6 }, (_, i) => `flood${i}@flooder.github.io`);
+  const ids = ["paperly-ai@paperly.org", "small@example.com", ...flood];
+  const owners = { "paperly-ai@paperly.org": "paperly/ai", "small@example.com": "someone/small" };
+  const build = (blocked, out = outDir()) =>
+    buildRegistry({
+      config,
+      listings: ids.map((id) => ({ file: `${id}.json`, listing: listing({ id, repo: owners[id] || `flooder/${id.split("@")[0]}` }) })),
+      blocked,
+      candidates: async (l) => [release("v1", l.id === "small@example.com" ? xpi({ manifest: manifest({ zotero: { id: l.id, update_url: `https://registry.test/updates/${l.id}.json` } }) }) : tool(l.id))],
+      out,
+    });
+  const size = (value) => Buffer.byteLength(JSON.stringify(value));
+  const { index: all } = await build({});
+  const block = (reason) => ({ "x@example.com": { versionRanges: ["*"], reason } });
+  // Over the limit by about one extension's worth
+  const room = 8 * 1024 * 1024 - size({ ...all, blocked: block("") });
+  const one = size(all.extensions.find((e) => e.id === "paperly-ai@paperly.org"));
+  const { index, report } = await build(block("x".repeat(room + one)));
+  // The flood goes as a whole; the official extension and the small one stay
+  assert.deepEqual(index.extensions.map((e) => e.id).sort(), ["paperly-ai@paperly.org", "small@example.com"]);
+  assert.ok(report.filter((e) => flood.includes(e.id)).every((e) => !e.listed && /flooder's 6 extension/.test(e.problems[0])));
+});
+
 test("an index too large leaves out its largest extensions, not the blocks", async () => {
   // Entries of three sizes, by how many web addresses each version names
   const hosts = { "large@example.com": 40, "medium@example.com": 20, "small@example.com": 0 };
@@ -298,7 +327,7 @@ test("an index too large leaves out its largest extensions, not the blocks", asy
   const build = (blocked, out = outDir()) =>
     buildRegistry({
       config,
-      listings: Object.keys(hosts).map((id) => ({ file: `${id}.json`, listing: listing({ id }) })),
+      listings: Object.keys(hosts).map((id) => ({ file: `${id}.json`, listing: listing({ id, repo: `${id.split("@")[0]}-owner/${id.split("@")[0]}` }) })),
       blocked,
       candidates: async (l) => [release("v1", sized(l.id))],
       out,
@@ -324,7 +353,7 @@ test("an index too large leaves out its largest extensions, not the blocks", asy
   assert.deepEqual(report[0].versions, []);
   assert.match(
     report[0].problems[0],
-    /^Left out: index.json would be over the 8.0 MB Paperly can be relied on to download, and at \d+ KB this was the largest extension in it\.$/,
+    /^Left out: index.json would be over the 8.0 MB Paperly can be relied on to download, and large-owner's 1 extension\(s\), at \d+ KB together, took the most of it\.$/,
   );
   assert.equal(existsSync(join(out, "updates/large@example.com.json")), false);
   assert.equal(existsSync(join(out, "files/large@example.com")), false);
@@ -335,7 +364,7 @@ test("an index too large leaves out its largest extensions, not the blocks", asy
     build(block("x".repeat(9 * 1024 * 1024))),
     (e) =>
       e.fatal &&
-      /^index.json would take 9.0 MB with no extension listed, over the 8.0 MB .*; blocked.json must be made smaller\.$/.test(e.message),
+      /^index.json would take 9.0 MB with only the official extensions and the blocks in it, over the 8.0 MB .*; blocked.json, or an official listing, must be made smaller\.$/.test(e.message),
   );
 });
 

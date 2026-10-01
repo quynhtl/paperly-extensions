@@ -158,3 +158,9 @@ for (const entry of report) {
   }
 }
 console.log(`${listed} of ${report.length} listed in ${values.out}${signingKey ? "" : " (unsigned)"}`);
+// Leaving extensions out keeps publishing, and the blocks, going; a maintainer
+// still has to hear of it, and a passing run would not say so by itself.
+const leftOut = report.filter((e) => e.problems.some((p) => p.startsWith("Left out: index.json")));
+if (leftOut.length) {
+  console.log(`::warning::index.json was too large, so ${leftOut.length} extension(s) were left out: ${leftOut.map((e) => e.id).join(", ")}. See the build log.`);
+}
