@@ -7,6 +7,12 @@
 // It refuses to build what the Paperly marketplace would refuse -- no id, no
 // version bounds, no bootstrap.js, or an update_url that does not point at the
 // marketplace -- so a mistake shows up here rather than in a pull request.
+//
+//   PAPERLY_MARKETPLACE=http://127.0.0.1:8765/ node scripts/build.mjs
+//
+// builds for a local test marketplace instead: src/manifest.json stays as it
+// is, and the packed copy's update_url points at that address. Such an .xpi is
+// for testing only; the marketplace refuses it.
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -104,8 +110,10 @@ function listFiles(dir) {
 /**
  * Reads src/ and returns the .xpi's name and bytes, or throws with every
  * problem found. `warnings` are things to fix before publishing.
+ * `marketplace`, when given, is a test marketplace the packed manifest's
+ * update_url points at instead of the real one.
  */
-export function buildXpi(srcDir) {
+export function buildXpi(srcDir, { marketplace } = {}) {
   const problems = [];
   const warnings = [];
   let manifest;
@@ -145,13 +153,37 @@ export function buildXpi(srcDir) {
   if (problems.length) {
     throw new Error(problems.join("\n"));
   }
+  if (marketplace && marketplace !== MARKETPLACE) {
+    const packed = structuredClone(manifest);
+    packed.applications.zotero.update_url = `${marketplace}updates/${slug(zotero.id)}.json`;
+    files.find((f) => f.name === "manifest.json").data = Buffer.from(`${JSON.stringify(packed, null, 2)}\n`);
+    warnings.push(`Built for the test marketplace at ${marketplace}. Do not release this .xpi; the marketplace refuses it.`);
+  }
   return { name: `${slug(zotero.id)}-${manifest.version}.xpi`, data: zip(files), manifest, warnings };
+}
+
+/** $PAPERLY_MARKETPLACE as a base URL ending in "/", or undefined. */
+function testMarketplace(value) {
+  if (!value) {
+    return undefined;
+  }
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    url = null;
+  }
+  if (!url || !/^https?:$/.test(url.protocol)) {
+    throw new Error(`PAPERLY_MARKETPLACE must be an http:// or https:// address, not "${value}".`);
+  }
+  return url.href.endsWith("/") ? url.href : `${url.href}/`;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const root = fileURLToPath(new URL("../", import.meta.url));
   try {
-    const { name, data, warnings } = buildXpi(join(root, "src"));
+    const marketplace = testMarketplace(process.env.PAPERLY_MARKETPLACE);
+    const { name, data, warnings } = buildXpi(join(root, "src"), { marketplace });
     mkdirSync(join(root, "dist"), { recursive: true });
     writeFileSync(join(root, "dist", name), data);
     for (const warning of warnings) {

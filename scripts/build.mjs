@@ -18,7 +18,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { ROOT, loadConfig } from "./lib/config.mjs";
+import { ROOT, loadConfig, slug } from "./lib/config.mjs";
 import { buildRegistry, validateBlocked } from "./lib/build.mjs";
 import { download, listReleases, repoById } from "./lib/github.mjs";
 
@@ -58,6 +58,10 @@ const blocked = Object.assign(Object.create(null), blockedFile);
 const local = new Map(
   values.local.map((pair) => {
     const at = pair.lastIndexOf("=");
+    if (at <= 0) {
+      console.error(`--local takes <id>=<path to .xpi>, not "${pair}".`);
+      process.exit(2);
+    }
     return [pair.slice(0, at), pair.slice(at + 1)];
   }),
 );
@@ -75,6 +79,14 @@ for (const name of readdirSync(join(ROOT, "extensions")).filter((f) => f.endsWit
     continue;
   }
   listings.push({ file, listing });
+}
+// Only listed extensions are built, so a --local id with no listing would
+// otherwise be left out without a word.
+for (const id of local.keys()) {
+  if (!listings.some(({ listing }) => listing?.id === id)) {
+    console.error(`--local ${id}: no listing has that id. Write extensions/${slug(id)}.json first.`);
+    process.exit(2);
+  }
 }
 
 async function candidates(listing) {

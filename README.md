@@ -170,9 +170,18 @@ reads (see [scripts/lib/build.mjs](scripts/lib/build.mjs)):
 | `icons/<id>.png` | Taken from the newest version's `manifest.json` icons. |
 | `report.json` | What was accepted and rejected, and why. |
 
-To try an extension in a local marketplace before releasing it:
+To try an extension in a local marketplace before releasing it, first write
+its listing, `extensions/<id>.json`: only listed extensions are built. (For a
+local build `repoId` is not looked up, so any number does until the
+repository exists.) Then build the `.xpi` for the local marketplace, and the
+marketplace around it:
 
 ```sh
+# in your extension's folder (made from template/); src/ stays as it is,
+# and the .xpi's update_url points at the local marketplace
+PAPERLY_MARKETPLACE=http://127.0.0.1:8765/ npm run build
+
+# here
 node scripts/keygen.mjs                      # once; keep the private key in a file
 node scripts/build.mjs --out dist --base-url http://127.0.0.1:8765/ \
   --key-file dev.key --local <id>=path/to/your.xpi
@@ -181,10 +190,12 @@ python3 -m http.server 8765 -d dist
 
 then point a test profile of Paperly at it: set
 `extensions.zotero.paperlyExtensions.registryURL` to the base URL and
-`extensions.zotero.paperlyExtensions.publicKey` to the public key. The `.xpi`'s
-`update_url` must use the local base URL too, and because that is plain HTTP,
-the test profile also needs `extensions.checkUpdateSecurity` set to `false`;
-otherwise the add-on manager installs the extension but keeps it disabled.
+`extensions.zotero.paperlyExtensions.publicKey` to the public key. Because the
+local marketplace is plain HTTP, the test profile also needs
+`extensions.checkUpdateSecurity` set to `false`; otherwise the add-on manager
+installs the extension but keeps it disabled. An `.xpi` built for a local
+marketplace is refused by the real one, so release one built without
+`PAPERLY_MARKETPLACE`.
 
 ## What runs on GitHub
 

@@ -36,6 +36,19 @@ test("every place that names the marketplace names the one in registry.json", ()
   }
 });
 
+test("the template builds for a local test marketplace without its source changing", () => {
+  const local = "http://127.0.0.1:8765/";
+  const { data, manifest, warnings } = buildXpi(SRC, { marketplace: local });
+  const id = manifest.applications.zotero.id;
+  assert.match(manifest.applications.zotero.update_url, /^https:\/\/quynhtl/);
+  assert.ok(warnings.some((w) => /test marketplace at http:\/\/127\.0\.0\.1:8765\//.test(w)));
+
+  const listing = { id, name: "Hello Paperly", description: "x", repo: "your-name/hello-paperly", repoId: 1, declares: {} };
+  const result = inspectXpi(data, { listing, config: { ...loadConfig(), baseURL: local } });
+  assert.equal(result.ok, true);
+  assert.equal(result.manifest.applications.zotero.update_url, `${local}updates/${slug(id)}.json`);
+});
+
 test("the same source makes the same bytes", () => {
   assert.deepEqual(buildXpi(SRC).data, buildXpi(SRC).data);
 });

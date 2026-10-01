@@ -22,4 +22,7 @@ types/paperly.d.ts  Paperly's API, for TypeScript and editors
 3. **Build** with `npm run build` (Node 18 or later, nothing to install).
 4. **Try it** in Paperly: Tools → Plugins, then the gear menu → Install Plugin
    From File…, and pick the `.xpi`. Its view appears in Tools → Extensions….
+   To try it from a local test marketplace instead, build with
+   `PAPERLY_MARKETPLACE=http://127.0.0.1:8765/ npm run build`, and follow
+   [the marketplace's README](https://github.com/quynhtl/paperly-extensions#what-gets-published).
 5. **Publish** it: see [Getting started](../docs/getting-started.md).
