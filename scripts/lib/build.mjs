@@ -39,7 +39,9 @@ export function validateBlocked(blocked) {
 
 /** The reason `version` of `id` is blocked, or null. */
 export function blockedReason(blocked, id, version) {
-  const entry = blocked[id];
+  // Own entries only: an id such as "constructor" must not find one of
+  // Object.prototype's members.
+  const entry = Object.hasOwn(blocked, id) ? blocked[id] : null;
   if (!entry) {
     return null;
   }
@@ -73,6 +75,16 @@ function updateManifest(id, versions) {
   };
 }
 
+/** Removes whatever was written for one extension, so that none of it is served. */
+function discard(out, id) {
+  const name = slug(id);
+  rmSync(join(out, "updates", `${name}.json`), { force: true });
+  rmSync(join(out, "files", name), { recursive: true, force: true });
+  for (const ext of Object.values(ICON_EXTENSIONS)) {
+    rmSync(join(out, "icons", `${name}.${ext}`), { force: true });
+  }
+}
+
 /**
  * Builds the marketplace into `out`:
  *
@@ -85,6 +97,10 @@ function updateManifest(id, versions) {
  * `listings` is [{ file, listing }]. `candidates(listing)` resolves to that
  * extension's releases, newest first: [{ label, released, problem, load }],
  * where `load()` resolves to the .xpi's bytes.
+ *
+ * One extension can never stop the build: whatever goes wrong with it is
+ * written in the report, and it is left out. Otherwise one bad release would
+ * hold back every other extension's updates, and blocked.json with them.
  */
 export async function buildRegistry({
   config,
@@ -101,21 +117,15 @@ export async function buildRegistry({
 
   const report = [];
   const extensions = [];
-  for (const { file, listing } of listings) {
-    const entry = { id: listing?.id ?? null, file, listed: false, versions: [], rejected: [], problems: [] };
-    report.push(entry);
-    const errors = validateListing(listing, { fileName: basename(file) });
-    if (errors.length) {
-      entry.problems.push(...errors);
-      continue;
-    }
 
+  /** One valid listing's index entry, with its files written; null if nothing passed. */
+  async function buildExtension(listing, entry) {
     let releases;
     try {
       releases = await candidates(listing);
     } catch (e) {
       entry.problems.push(e.message);
-      continue;
+      return null;
     }
 
     const accepted = [];
@@ -173,7 +183,7 @@ export async function buildRegistry({
     entry.versions = accepted.map((v) => v.version);
     if (!accepted.length) {
       entry.problems.push("No release passed the checks, so the extension is not listed.");
-      continue;
+      return null;
     }
 
     let iconURL = null;
@@ -190,7 +200,13 @@ export async function buildRegistry({
     if (proof.problem) {
       entry.problems.push(`Publisher not verified: ${proof.problem}`);
     }
-    extensions.push({
+    // The update manifest is written last: once it is there, installed copies
+    // take what it offers.
+    writeFileSync(
+      join(out, "updates", `${slug(listing.id)}.json`),
+      JSON.stringify(updateManifest(listing.id, accepted), null, 2),
+    );
+    return {
       id: listing.id,
       name: listing.name,
       description: listing.description,
@@ -210,12 +226,28 @@ export async function buildRegistry({
       declares: listing.declares,
       updateURL: updateURL(config, listing.id),
       versions: accepted,
-    });
-    writeFileSync(
-      join(out, "updates", `${slug(listing.id)}.json`),
-      JSON.stringify(updateManifest(listing.id, accepted), null, 2),
-    );
-    entry.listed = true;
+    };
+  }
+
+  for (const { file, listing } of listings) {
+    const entry = { id: listing?.id ?? null, file, listed: false, versions: [], rejected: [], problems: [] };
+    report.push(entry);
+    const errors = validateListing(listing, { fileName: basename(file) });
+    if (errors.length) {
+      entry.problems.push(...errors);
+      continue;
+    }
+    try {
+      const extension = await buildExtension(listing, entry);
+      if (extension) {
+        extensions.push(extension);
+        entry.listed = true;
+      }
+    } catch (e) {
+      entry.problems.push(`The extension could not be built: ${e?.message ?? e}`);
+      entry.versions = [];
+      discard(out, listing.id);
+    }
   }
 
   extensions.sort((a, b) => a.name.localeCompare(b.name));

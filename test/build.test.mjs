@@ -111,6 +111,49 @@ test("a broken listing or an unreachable repository lists nothing", async () => 
   assert.match(report[2].problems[0], /JSON object/);
 });
 
+test("one extension that breaks the build leaves the others listed", async () => {
+  const out = outDir();
+  const other = listing({ id: "other@example.com" });
+  const proto = listing({ id: "constructor" });
+  const { index, report } = await buildRegistry({
+    config,
+    listings: [
+      { file: "hello@example.com.json", listing: listing() },
+      { file: "other@example.com.json", listing: other },
+      { file: "constructor.json", listing: proto },
+    ],
+    // An id named after an Object.prototype member finds no block.
+    blocked: Object.create(null),
+    candidates: async (l) =>
+      l.id === "hello@example.com"
+        ? [
+            // A manifest that is not an object, and a version too long for a file name.
+            release("v3", xpi({ files: { "manifest.json": "null" } })),
+            release("v2", xpiAt(`1a${"b".repeat(300)}`)),
+            release("v1", xpiAt("1.0.0")),
+          ]
+        : [release("v1", xpi({ manifest: manifest({ zotero: { id: l.id, update_url: `https://registry.test/updates/${l.id}.json` } }) }))],
+    verifyPublisher: async (l) => {
+      if (l.id === "other@example.com") {
+        throw new Error("the publisher check fell over");
+      }
+      return { verified: false, domain: null, problem: null };
+    },
+    out,
+  });
+  assert.deepEqual(index.extensions.map((e) => e.id).sort(), ["constructor", "hello@example.com"]);
+  const [hello, broken] = report;
+  assert.deepEqual(hello.versions, ["1.0.0"]);
+  assert.match(hello.rejected[0].reasons[0], /JSON object/);
+  assert.match(hello.rejected[1].reasons[0], /not a valid version/);
+  assert.equal(broken.listed, false);
+  assert.match(broken.problems[0], /could not be built: the publisher check fell over/);
+  // Nothing of the broken extension is served.
+  assert.equal(existsSync(join(out, "updates/other@example.com.json")), false);
+  assert.equal(existsSync(join(out, "files/other@example.com")), false);
+  assert.equal(blockedReason({}, "constructor", "1.0"), null);
+});
+
 test("blocked.json is checked", () => {
   assert.deepEqual(validateBlocked({}), []);
   assert.equal(validateBlocked({ x: { versionRanges: [], reason: "" } }).length, 2);

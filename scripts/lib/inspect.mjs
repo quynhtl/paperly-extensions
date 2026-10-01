@@ -104,6 +104,8 @@ const URL_IN_STRING = /["'`](?:https?|wss?):\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi
 
 const ICON_TYPES = { png: "image/png", svg: "image/svg+xml", jpg: "image/jpeg", jpeg: "image/jpeg" };
 
+const MAX_VERSION_LENGTH = 64;
+
 function hostCovered(host, declared) {
   return declared.some((d) => host === d || host.endsWith(`.${d}`));
 }
@@ -175,6 +177,10 @@ export function inspectXpi(buffer, { listing, config }) {
     error("manifest-invalid", `manifest.json cannot be read: ${e.message}`);
     return result;
   }
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+    error("manifest-invalid", "manifest.json must hold a JSON object.");
+    return result;
+  }
   result.manifest = manifest;
   if (manifest.manifest_version !== 2) {
     error("manifest-version", "manifest_version must be 2.");
@@ -183,9 +189,19 @@ export function inspectXpi(buffer, { listing, config }) {
   if (!result.name) {
     error("name-missing", 'manifest.json has no "name".');
   }
+  // The version names a file, and Gecko reads each number as an int32, so
+  // both are kept short.
   const version = manifest.version;
-  if (typeof version !== "string" || !/^\d+(?:\.\d+){0,3}(?:[a-z][a-z0-9.+-]*)?$/i.test(version)) {
-    error("version-invalid", `"${version}" is not a valid version.`);
+  if (
+    typeof version !== "string" ||
+    version.length > MAX_VERSION_LENGTH ||
+    /\d{10}/.test(version) ||
+    !/^\d+(?:\.\d+){0,3}(?:[a-z][a-z0-9.+-]*)?$/i.test(version)
+  ) {
+    error(
+      "version-invalid",
+      `"${String(version).slice(0, MAX_VERSION_LENGTH)}" is not a valid version: up to ${MAX_VERSION_LENGTH} characters, such as 1.2.3, with no number longer than 9 digits.`,
+    );
   } else {
     result.version = version;
   }

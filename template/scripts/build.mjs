@@ -117,8 +117,9 @@ export function buildXpi(srcDir) {
   const zotero = manifest.applications?.zotero || {};
   if (manifest.manifest_version !== 2) problems.push('"manifest_version" must be 2.');
   if (!manifest.name) problems.push('"name" is missing.');
-  if (!/^\d+(?:\.\d+){0,3}(?:[a-z][a-z0-9.+-]*)?$/i.test(manifest.version || "")) {
-    problems.push(`"version" must look like 1.2.3, not "${manifest.version}".`);
+  const version = String(manifest.version || "");
+  if (version.length > 64 || /\d{10}/.test(version) || !/^\d+(?:\.\d+){0,3}(?:[a-z][a-z0-9.+-]*)?$/i.test(version)) {
+    problems.push(`"version" must look like 1.2.3 (up to 64 characters, no number over 9 digits), not "${manifest.version}".`);
   }
   if (!zotero.id) problems.push('"applications.zotero.id" is missing.');
   if (!zotero.strict_min_version || !zotero.strict_max_version) {

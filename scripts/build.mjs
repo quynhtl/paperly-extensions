@@ -43,12 +43,15 @@ if (!signingKey && !values.unsigned) {
   process.exit(2);
 }
 
-const blocked = JSON.parse(readFileSync(join(ROOT, "blocked.json"), "utf8"));
-const blockedErrors = validateBlocked(blocked);
+const blockedFile = JSON.parse(readFileSync(join(ROOT, "blocked.json"), "utf8"));
+const blockedErrors = validateBlocked(blockedFile);
 if (blockedErrors.length) {
   console.error(blockedErrors.join("\n"));
   process.exit(1);
 }
+// Looked up by extension id, which is anyone's choice: with no prototype, no
+// id can find an inherited member instead of a block.
+const blocked = Object.assign(Object.create(null), blockedFile);
 
 const local = new Map(
   values.local.map((pair) => {
