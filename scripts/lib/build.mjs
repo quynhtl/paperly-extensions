@@ -17,6 +17,23 @@ import { compareVersions } from "./version.mjs";
 const ICON_EXTENSIONS = { "image/png": "png", "image/jpeg": "jpg" };
 
 /**
+ * The most one extension's entry in index.json, or its update manifest, may
+ * take. The checks keep what goes into them short, so an extension over this
+ * got something past them, and is left out rather than make every copy of
+ * Paperly download it.
+ */
+const MAX_ENTRY_BYTES = 256 * 1024;
+
+/**
+ * The most index.json may take. Paperly gives up on a download after 30
+ * seconds, and with the index it would lose every new block.
+ */
+const MAX_INDEX_BYTES = 8 * 1024 * 1024;
+
+const kb = (n) => `${Math.ceil(n / 1024)} KB`;
+const mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+
+/**
  * Problems with blocked.json, which uses the format of Zotero's own
  * blocked-plugin list, plus one field: `"global": true`. Paperly applies a
  * block only to copies installed from the marketplace, so that a block aimed
@@ -115,7 +132,8 @@ function discard(out, id) {
  * The exception is an error marked `fatal`, such as GitHub not answering:
  * that is not about one extension, and building on regardless would publish
  * a marketplace missing the ones GitHub did not answer for. It is thrown, so
- * that nothing is deployed and the site already up stays up.
+ * that nothing is deployed and the site already up stays up. An index.json
+ * too large to publish is one too, naming the largest extensions in it.
  */
 export async function buildRegistry({
   config,
@@ -205,6 +223,7 @@ export async function buildRegistry({
         maxAppVersion: result.maxAppVersion,
         uses: result.detected.uses,
         hosts: result.detected.hosts,
+        moreHosts: result.detected.moreHosts,
         findings: result.findings.map(({ level, code, message }) => ({ level, code, message })),
       });
       icon ??= result.icon;
@@ -231,13 +250,7 @@ export async function buildRegistry({
     if (proof.problem) {
       entry.problems.push(`Publisher not verified: ${proof.problem}`);
     }
-    // The update manifest is written last: once it is there, installed copies
-    // take what it offers.
-    writeFileSync(
-      join(out, "updates", `${slug(listing.id)}.json`),
-      JSON.stringify(updateManifest(listing.id, accepted), null, 2),
-    );
-    return {
+    const extension = {
       id: listing.id,
       name: listing.name,
       description: listing.description,
@@ -258,6 +271,20 @@ export async function buildRegistry({
       updateURL: updateURL(config, listing.id),
       versions: accepted,
     };
+    const updates = JSON.stringify(updateManifest(listing.id, accepted), null, 2);
+    for (const [what, text] of [
+      ["entry in index.json", JSON.stringify(extension)],
+      ["update manifest", updates],
+    ]) {
+      const size = Buffer.byteLength(text);
+      if (size > MAX_ENTRY_BYTES) {
+        throw new Error(`its ${what} would take ${kb(size)}, and one extension may take ${kb(MAX_ENTRY_BYTES)}.`);
+      }
+    }
+    // The update manifest is written last: once it is there, installed copies
+    // take what it offers.
+    writeFileSync(join(out, "updates", `${slug(listing.id)}.json`), updates);
+    return extension;
   }
 
   for (const { file, listing } of listings) {
@@ -301,6 +328,18 @@ export async function buildRegistry({
   // The signature covers these exact bytes, so they are written once and
   // never re-serialised.
   const bytes = Buffer.from(JSON.stringify(index));
+  if (bytes.length > MAX_INDEX_BYTES) {
+    const largest = extensions
+      .map((e) => ({ id: e.id, size: Buffer.byteLength(JSON.stringify(e)) }))
+      .sort((a, b) => b.size - a.size)
+      .slice(0, 5)
+      .map((e) => `${e.id} (${kb(e.size)})`);
+    const e = new Error(
+      `index.json would take ${mb(bytes.length)}, over the ${mb(MAX_INDEX_BYTES)} Paperly can be relied on to download. The largest extensions in it: ${largest.join(", ") || "none"}.`,
+    );
+    e.fatal = true;
+    throw e;
+  }
   writeFileSync(join(out, "index.json"), bytes);
   if (signingKey) {
     writeFileSync(join(out, "index.json.sig"), await sign(bytes, signingKey));

@@ -87,6 +87,57 @@ test("code too large to scan is refused without being read, and a broken archive
   assert.deepEqual(codes(inspectXpi(bytes, { listing: listing(), config }), "error"), ["unreadable"]);
 });
 
+test("strict_min_version and strict_max_version must be short versions", () => {
+  const check = (min, max) =>
+    inspectXpi(xpi({ manifest: manifest({ zotero: { strict_min_version: min, strict_max_version: max } }) }), {
+      listing: listing(),
+      config,
+    });
+  for (const [min, max] of [["10.999", "11.*"], ["7.0a1", "11.0.*"], ["*", "*"]]) {
+    assert.equal(check(min, max).ok, true, `${min} to ${max}`);
+  }
+
+  // Copied into the index and every update manifest, so a long one is refused
+  // rather than published.
+  const long = check("9.0", `11.${"0.".repeat(100000)}0`);
+  assert.deepEqual(codes(long), ["compat-invalid"]);
+  assert.equal(long.maxAppVersion, null);
+  assert.ok(long.findings[0].message.length < 300);
+  for (const [min, max] of [["11.x", "12.0"], ["9.0", "1234567890.0"], ["9.0", "11.* "]]) {
+    assert.deepEqual(codes(check(min, max), "error"), ["compat-invalid"], `${min} to ${max}`);
+  }
+});
+
+test("a version keeps a hundred web addresses and counts the rest", () => {
+  const code = [
+    ...Array.from({ length: 150 }, (_, i) => `fetch("https://h${String(i).padStart(3, "0")}.example.net/");`),
+    // Longer than any host name can be
+    `fetch("https://${"a".repeat(300)}.example.net/");`,
+  ].join("\n");
+  const result = inspectXpi(xpi({ files: { "content/a.js": code } }), { listing: listing(), config });
+  assert.equal(result.ok, true);
+  assert.equal(result.detected.hosts.length, 100);
+  assert.equal(result.detected.hosts[0], "h000.example.net");
+  assert.equal(result.detected.moreHosts, 50);
+  // The notice still counts every one.
+  assert.match(result.findings[0].message, / and 138 more\.$/);
+});
+
+test("findings are capped, and the file names they quote are cut short", () => {
+  const name = (i) => `content/${"n".repeat(300)}${i}.js`;
+  const files = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [name(i), 'import("https://example.com/x.js");']));
+  const result = inspectXpi(xpi({ files }), { listing: listing(), config });
+  assert.equal(result.ok, false);
+  assert.equal(result.findings.length, 50);
+  assert.deepEqual(result.findings[49], { level: "error", code: "more-findings", message: "And 11 more findings, not listed." });
+  assert.ok(result.findings.every((f) => f.message.length < 400));
+
+  // Names the ZIP reader quotes too
+  const unsafe = inspectXpi(xpi({ files: { [`../${"x".repeat(1000)}`]: "x" } }), { listing: listing(), config });
+  assert.deepEqual(codes(unsafe), ["not-a-zip"]);
+  assert.ok(unsafe.findings[0].message.length < 300);
+});
+
 const withIcons = (icons, files) =>
   inspectXpi(xpi({ manifest: manifest({ icons }), files }), { listing: listing(), config });
 

@@ -9,7 +9,7 @@
 // Three levels: an "error" keeps the version out of the marketplace; a
 // "warning" is shown next to the install button; a "notice" is shown in the
 // details.
-import { readZip, ZipError } from "./zip.mjs";
+import { nameInMessage, readZip, ZipError } from "./zip.mjs";
 import { updateURL } from "./config.mjs";
 import { isCompatible } from "./version.mjs";
 
@@ -130,6 +130,23 @@ const NOT_CONTACTED = new Set([
 
 const URL_IN_STRING = /["'`](?:https?|wss?):\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi;
 
+/** The longest host name DNS allows; anything longer is no place code connects to. */
+const MAX_HOST_LENGTH = 253;
+
+/**
+ * The most web addresses kept for one version, which are published with it;
+ * the rest are counted. Code can mention millions, and each would be in the
+ * index Paperly downloads.
+ */
+const MAX_HOSTS = 100;
+
+/**
+ * The most findings kept for one version, for the same reason, and because
+ * every error is written in the report: past this, the last one kept says
+ * how many more there were.
+ */
+const MAX_FINDINGS = 50;
+
 /**
  * Icons the marketplace re-hosts: PNG and JPEG only. It serves them on its own
  * web address, where an SVG opened directly would run any script in it on
@@ -151,6 +168,18 @@ function iconFormat(path) {
 }
 
 const MAX_VERSION_LENGTH = 64;
+
+const VERSION = /^\d+(?:\.\d+){0,3}(?:[a-z][a-z0-9.+-]*)?$/i;
+
+/** strict_min_version and strict_max_version, where a part may be "*", as in 11.*. */
+const APP_VERSION = /^(?:\d+|\*)(?:\.(?:\d+|\*)){0,3}(?:[a-z][a-z0-9.+-]*)?$/i;
+
+// A version names a file; it and the strict versions are copied into the
+// index and every update manifest; and Gecko reads each number as an int32.
+// So all are kept short, with no number longer than 9 digits.
+function validVersion(version, pattern) {
+  return typeof version === "string" && version.length <= MAX_VERSION_LENGTH && !/\d{10}/.test(version) && pattern.test(version);
+}
 
 function hostCovered(host, declared) {
   return declared.some((d) => host === d || host.endsWith(`.${d}`));
@@ -187,9 +216,15 @@ function pickIcon(manifest) {
  */
 export function inspectXpi(buffer, { listing, config }) {
   const findings = [];
-  const error = (code, message, file) => findings.push({ level: "error", code, message, ...(file && { file }) });
-  const warning = (code, message) => findings.push({ level: "warning", code, message });
-  const notice = (code, message) => findings.push({ level: "notice", code, message });
+  let failed = false;
+  let omitted = 0;
+  const add = (finding) => (findings.length < MAX_FINDINGS ? findings.push(finding) : omitted++);
+  const error = (code, message, file) => {
+    failed = true;
+    add({ level: "error", code, message, ...(file && { file }) });
+  };
+  const warning = (code, message) => add({ level: "warning", code, message });
+  const notice = (code, message) => add({ level: "notice", code, message });
   const result = {
     ok: false,
     findings,
@@ -199,7 +234,7 @@ export function inspectXpi(buffer, { listing, config }) {
     minAppVersion: null,
     maxAppVersion: null,
     icon: null,
-    detected: { uses: [], hosts: [] },
+    detected: { uses: [], hosts: [], moreHosts: 0 },
   };
 
   if (buffer.length > config.maxXpiBytes) {
@@ -241,15 +276,8 @@ export function inspectXpi(buffer, { listing, config }) {
   if (!result.name) {
     error("name-missing", 'manifest.json has no "name".');
   }
-  // The version names a file, and Gecko reads each number as an int32, so
-  // both are kept short.
   const version = manifest.version;
-  if (
-    typeof version !== "string" ||
-    version.length > MAX_VERSION_LENGTH ||
-    /\d{10}/.test(version) ||
-    !/^\d+(?:\.\d+){0,3}(?:[a-z][a-z0-9.+-]*)?$/i.test(version)
-  ) {
+  if (!validVersion(version, VERSION)) {
     error(
       "version-invalid",
       `"${String(version).slice(0, MAX_VERSION_LENGTH)}" is not a valid version: up to ${MAX_VERSION_LENGTH} characters, such as 1.2.3, with no number longer than 9 digits.`,
@@ -263,7 +291,7 @@ export function inspectXpi(buffer, { listing, config }) {
     error("applications-missing", 'manifest.json needs an "applications": { "zotero": { ... } } block.');
   } else {
     if (zotero.id !== listing.id) {
-      error("id-mismatch", `The manifest's id is "${zotero.id}", but the listing's is "${listing.id}".`);
+      error("id-mismatch", `The manifest's id is "${nameInMessage(String(zotero.id))}", but the listing's is "${listing.id}".`);
     }
     const expected = updateURL(config, listing.id);
     if (zotero.update_url !== expected) {
@@ -274,6 +302,15 @@ export function inspectXpi(buffer, { listing, config }) {
     }
     if (typeof zotero.strict_min_version !== "string" || typeof zotero.strict_max_version !== "string") {
       error("compat-missing", "applications.zotero needs strict_min_version and strict_max_version.");
+    } else if (!validVersion(zotero.strict_min_version, APP_VERSION) || !validVersion(zotero.strict_max_version, APP_VERSION)) {
+      for (const key of ["strict_min_version", "strict_max_version"]) {
+        if (!validVersion(zotero[key], APP_VERSION)) {
+          error(
+            "compat-invalid",
+            `${key} "${zotero[key].slice(0, MAX_VERSION_LENGTH)}" is not a valid version: up to ${MAX_VERSION_LENGTH} characters, such as 10.0 or 11.*, with no number longer than 9 digits.`,
+          );
+        }
+      }
     } else {
       result.minAppVersion = zotero.strict_min_version;
       result.maxAppVersion = zotero.strict_max_version;
@@ -300,7 +337,7 @@ export function inspectXpi(buffer, { listing, config }) {
     const size = zip.entries.get(name).size;
     if (size > MAX_SCANNED_BYTES) {
       const mb = (n) => (n / 1024 / 1024).toFixed(1);
-      error("file-too-large", `${name} is ${mb(size)} MB; a file of code over ${mb(MAX_SCANNED_BYTES)} MB cannot be checked.`, name);
+      error("file-too-large", `${nameInMessage(name)} is ${mb(size)} MB; a file of code over ${mb(MAX_SCANNED_BYTES)} MB cannot be checked.`, name);
       continue;
     }
     let text;
@@ -309,22 +346,22 @@ export function inspectXpi(buffer, { listing, config }) {
     } catch (e) {
       // The version is refused either way, and an archive that breaks one
       // limit would only cost time on the rest.
-      error("unreadable", `${name} cannot be read: ${e.message}`, name);
+      error("unreadable", `${nameInMessage(name)} cannot be read: ${e.message}`, name);
       break;
     }
     for (const pattern of REMOTE_CODE) {
       const m = pattern.exec(text);
       if (m) {
-        error("remote-code", `${name} loads code from the internet: ${snippetAround(text, m.index)}`, name);
+        error("remote-code", `${nameInMessage(name)} loads code from the internet: ${snippetAround(text, m.index)}`, name);
       }
     }
     const script = remoteScriptTag(text);
     if (script >= 0) {
-      error("remote-code", `${name} loads code from the internet: ${snippetAround(text, script)}`, name);
+      error("remote-code", `${nameInMessage(name)} loads code from the internet: ${snippetAround(text, script)}`, name);
     }
     const obfuscated = text.match(OBFUSCATED);
     if (obfuscated && obfuscated.length >= OBFUSCATED_MIN) {
-      error("obfuscated", `${name} looks deliberately obfuscated (${obfuscated.length} _0x… names).`, name);
+      error("obfuscated", `${nameInMessage(name)} looks deliberately obfuscated (${obfuscated.length} _0x… names).`, name);
     }
     if (!dynamic && DYNAMIC_CODE.some((p) => p.test(text))) {
       dynamic = name;
@@ -336,12 +373,17 @@ export function inspectXpi(buffer, { listing, config }) {
     }
     for (const m of text.matchAll(URL_IN_STRING)) {
       const host = m[1].toLowerCase();
-      if (!NOT_CONTACTED.has(host) && !/^(?:127\.|0\.0\.0\.0$)/.test(host)) {
+      if (host.length <= MAX_HOST_LENGTH && !NOT_CONTACTED.has(host) && !/^(?:127\.|0\.0\.0\.0$)/.test(host)) {
         hosts.add(host);
       }
     }
   }
-  result.detected = { uses: [...uses].sort(), hosts: [...hosts].sort() };
+  const allHosts = [...hosts].sort();
+  result.detected = {
+    uses: [...uses].sort(),
+    hosts: allHosts.slice(0, MAX_HOSTS),
+    moreHosts: Math.max(0, allHosts.length - MAX_HOSTS),
+  };
 
   const declares = listing.declares || {};
   for (const use of USES) {
@@ -349,7 +391,7 @@ export function inspectXpi(buffer, { listing, config }) {
       warning(`undeclared-${use.key}`, `The code ${use.does}, but the listing does not say so.`);
     }
   }
-  const undeclaredHosts = result.detected.hosts.filter((h) => !hostCovered(h, declares.network || []));
+  const undeclaredHosts = allHosts.filter((h) => !hostCovered(h, declares.network || []));
   if (undeclaredHosts.length) {
     const shown = undeclaredHosts.slice(0, 12).join(", ");
     const more = undeclaredHosts.length > 12 ? ` and ${undeclaredHosts.length - 12} more` : "";
@@ -359,7 +401,7 @@ export function inspectXpi(buffer, { listing, config }) {
     warning("no-privacy-policy", "Sends content to web services, but gives no privacy policy.");
   }
   if (dynamic) {
-    notice("dynamic-code", `${dynamic} builds code from text while running (eval or new Function).`);
+    notice("dynamic-code", `${nameInMessage(dynamic)} builds code from text while running (eval or new Function).`);
   }
 
   // The icon, for the marketplace to show.
@@ -367,7 +409,7 @@ export function inspectXpi(buffer, { listing, config }) {
   if (icon?.skipped) {
     notice(
       "icon-format",
-      `The marketplace shows PNG and JPEG icons only, so ${icon.skipped} is not shown. Add a PNG to the icons in manifest.json.`,
+      `The marketplace shows PNG and JPEG icons only, so ${nameInMessage(icon.skipped)} is not shown. Add a PNG to the icons in manifest.json.`,
     );
   } else if (icon) {
     const format = iconFormat(icon.path);
@@ -382,16 +424,25 @@ export function inspectXpi(buffer, { listing, config }) {
       }
     }
     if (size > MAX_ICON_BYTES) {
-      notice("icon-too-large", `The icon ${icon.path} is ${Math.ceil(size / 1024)} KB; the marketplace shows icons up to ${MAX_ICON_BYTES / 1024} KB.`);
+      notice("icon-too-large", `The icon ${nameInMessage(icon.path)} is ${Math.ceil(size / 1024)} KB; the marketplace shows icons up to ${MAX_ICON_BYTES / 1024} KB.`);
     } else if (!data) {
-      notice("icon-missing", `The icon ${icon.path} is not in the .xpi.`);
+      notice("icon-missing", `The icon ${nameInMessage(icon.path)} is not in the .xpi.`);
     } else if (!format.magic.every((byte, i) => data[i] === byte)) {
-      notice("icon-format", `The icon ${icon.path} is not a ${format.type === "image/png" ? "PNG" : "JPEG"} file, whatever its name says, so it is not shown.`);
+      notice("icon-format", `The icon ${nameInMessage(icon.path)} is not a ${format.type === "image/png" ? "PNG" : "JPEG"} file, whatever its name says, so it is not shown.`);
     } else {
       result.icon = { path: icon.path, type: format.type, data };
     }
   }
 
-  result.ok = !findings.some((f) => f.level === "error");
+  if (omitted) {
+    // The last one kept makes way for the count: an error when the version
+    // is refused, so that the reasons given for refusing it include it.
+    findings[MAX_FINDINGS - 1] = {
+      level: failed ? "error" : "notice",
+      code: "more-findings",
+      message: `And ${omitted + 1} more findings, not listed.`,
+    };
+  }
+  result.ok = !failed;
   return result;
 }

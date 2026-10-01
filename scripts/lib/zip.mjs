@@ -40,6 +40,14 @@ export function crc32(data) {
 
 export class ZipError extends Error {}
 
+/**
+ * A file name as a message quotes it. A name in an archive can be 64 KB long,
+ * and what the checks say is kept in the report and published with a version.
+ */
+export function nameInMessage(name) {
+  return name.length > 200 ? `${name.slice(0, 200)}…` : name;
+}
+
 const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 /** A name that could reach outside the folder it is unpacked into, or mean different things to different readers. */
@@ -132,14 +140,14 @@ export function readZip(buffer, limits = {}) {
     }
     const key = rawName.toString("latin1");
     if (seen.has(key)) {
-      throw new ZipError(`${name} is in the archive twice`);
+      throw new ZipError(`${nameInMessage(name)} is in the archive twice`);
     }
     seen.add(key);
     if (unsafeName(name)) {
-      throw new ZipError(`${JSON.stringify(name)} is not a safe file name`);
+      throw new ZipError(`${JSON.stringify(nameInMessage(name))} is not a safe file name`);
     }
     if (flags & 1) {
-      throw new ZipError(`${name} is encrypted`);
+      throw new ZipError(`${nameInMessage(name)} is encrypted`);
     }
     if (size === 0xffffffff || compressedSize === 0xffffffff || offset === 0xffffffff) {
       throw new ZipError("ZIP64 archives are not supported");
@@ -153,7 +161,7 @@ export function readZip(buffer, limits = {}) {
       offset + 30 + nameLength > buffer.length ||
       !buffer.subarray(offset + 30, offset + 30 + nameLength).equals(rawName)
     ) {
-      throw new ZipError(`${name} has a different name, or none, in its local header`);
+      throw new ZipError(`${nameInMessage(name)} has a different name, or none, in its local header`);
     }
     if (name.endsWith("/")) {
       continue;
@@ -171,7 +179,7 @@ export function readZip(buffer, limits = {}) {
       return null;
     }
     if (entry.size > maxEntryBytes) {
-      throw new ZipError(`${name} is too large to check (${entry.size} bytes)`);
+      throw new ZipError(`${nameInMessage(name)} is too large to check (${entry.size} bytes)`);
     }
     // Counted before inflating, from the size the directory states (which the
     // inflated data must then match), so the cap bounds the work as well as
@@ -182,14 +190,14 @@ export function readZip(buffer, limits = {}) {
     total += entry.size;
     const o = entry.offset;
     if (o + 30 > buffer.length || buffer.readUInt32LE(o) !== LOCAL) {
-      throw new ZipError(`${name} is damaged`);
+      throw new ZipError(`${nameInMessage(name)} is damaged`);
     }
     // The local header's own name and extra lengths can differ from the
     // central directory's; only the local ones say where the data starts.
     const start = o + 30 + buffer.readUInt16LE(o + 26) + buffer.readUInt16LE(o + 28);
     const end = start + entry.compressedSize;
     if (end > buffer.length) {
-      throw new ZipError(`${name} is damaged`);
+      throw new ZipError(`${nameInMessage(name)} is damaged`);
     }
     const raw = buffer.subarray(start, end);
     let data;
@@ -200,13 +208,13 @@ export function readZip(buffer, limits = {}) {
         // One byte over the stated size is enough to tell a lie from the truth.
         data = zlib.inflateRawSync(raw, { maxOutputLength: entry.size + 1 });
       } catch {
-        throw new ZipError(`${name} is damaged or larger than it says`);
+        throw new ZipError(`${nameInMessage(name)} is damaged or larger than it says`);
       }
     } else {
-      throw new ZipError(`${name} uses an unsupported compression method (${entry.method})`);
+      throw new ZipError(`${nameInMessage(name)} uses an unsupported compression method (${entry.method})`);
     }
     if (data.length !== entry.size || crc32(data) !== entry.crc) {
-      throw new ZipError(`${name} is damaged (its checksum does not match)`);
+      throw new ZipError(`${nameInMessage(name)} is damaged (its checksum does not match)`);
     }
     return data;
   }

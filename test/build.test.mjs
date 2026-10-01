@@ -223,6 +223,49 @@ test("when GitHub cannot be asked, the build stops instead of publishing less", 
   );
 });
 
+test("an extension too large for the index is left out, and an index too large stops the build", async () => {
+  // A hundred web addresses as long as host names go, in each of twelve versions
+  const large = (v) =>
+    xpi({
+      manifest: manifest({ version: `1.${v}` }),
+      files: {
+        "content/a.js": Array.from({ length: 100 }, (_, i) => `fetch("https://${"h".repeat(230)}${i}.v${v}.example.net/");`).join("\n"),
+      },
+    });
+  const other = listing({ id: "other@example.com" });
+  const out = outDir();
+  const { index, report } = await buildRegistry({
+    config: { ...config, versionsKept: 12 },
+    listings: [
+      { file: "hello@example.com.json", listing: listing() },
+      { file: "other@example.com.json", listing: other },
+    ],
+    blocked: {},
+    candidates: async (l) =>
+      l.id === "hello@example.com"
+        ? Array.from({ length: 12 }, (_, v) => release(`v1.${v}`, large(v)))
+        : [release("v1", xpi({ manifest: manifest({ zotero: { id: l.id, update_url: `https://registry.test/updates/${l.id}.json` } }) }))],
+    out,
+  });
+  assert.deepEqual(index.extensions.map((e) => e.id), ["other@example.com"]);
+  assert.equal(report[0].listed, false);
+  assert.match(report[0].problems[0], /could not be built: its entry in index.json would take \d+ KB, and one extension may take 256 KB/);
+  assert.equal(existsSync(join(out, "updates/hello@example.com.json")), false);
+  assert.equal(existsSync(join(out, "files/hello@example.com")), false);
+
+  const blocked = { "x@example.com": { versionRanges: ["*"], reason: "x".repeat(9 * 1024 * 1024) } };
+  await assert.rejects(
+    buildRegistry({
+      config,
+      listings: [{ file: "hello@example.com.json", listing: listing() }],
+      blocked,
+      candidates: async () => [release("v1.0.0", xpiAt("1.0.0"))],
+      out: outDir(),
+    }),
+    (e) => e.fatal && /^index.json would take 9.0 MB, over the 8.0 MB .* hello@example.com \(1 KB\)\.$/.test(e.message),
+  );
+});
+
 test("blocked.json is checked", () => {
   assert.deepEqual(validateBlocked({}), []);
   assert.equal(validateBlocked({ x: { versionRanges: [], reason: "" } }).length, 2);

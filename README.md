@@ -94,7 +94,7 @@ Every version, before it is published
 | a file of code over 8 MB, too large to check | | an icon that is not a PNG or JPEG (an SVG, say), is not the format its name says, or is over 512 KB, which is then not shown |
 | an id other than the listing's | `sendsContent` without a `privacyPolicy` | |
 | an `update_url` other than the marketplace's | | |
-| no `strict_min_version`/`strict_max_version`, or no `bootstrap.js` | | |
+| no `strict_min_version`/`strict_max_version`, or one that is not a version such as `10.0` or `11.*`; no `bootstrap.js` | | |
 | code loaded from the internet, or obfuscated code | | |
 
 The checks read the code; they cannot prove an extension is safe. They are
@@ -181,6 +181,12 @@ reads (see [scripts/lib/build.mjs](scripts/lib/build.mjs)):
 | `updates/<id>.json` | The update manifest each extension's `update_url` points at. |
 | `icons/<id>.png` or `.jpg` | The newest version's icon from its `manifest.json`: of its PNG and JPEG icons, the smallest of 64px or more, else the largest. SVG icons are never re-hosted, since one opened from the marketplace's address would run its scripts there. |
 | `report.json` | What was accepted and rejected, and why. |
+
+Each version names at most 100 of the web addresses found in its code, with a
+count of the rest. An extension whose entry in `index.json`, or whose update
+manifest, would take over 256 KB is left out, and the report says so; an
+`index.json` over 8 MB, more than Paperly can be relied on to download, stops
+the build and names the largest extensions in it.
 
 To try an extension in a local marketplace before releasing it, first write
 its listing, `extensions/<id>.json`: only listed extensions are built. (For a
