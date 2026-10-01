@@ -105,7 +105,7 @@ test("strict_min_version and strict_max_version must be short versions", () => {
   }
 });
 
-test("a version keeps a hundred web addresses and counts the rest", () => {
+test("a version keeps a hundred web addresses, in 4 KB, and counts the rest", () => {
   const code = [
     ...Array.from({ length: 150 }, (_, i) => `fetch("https://h${String(i).padStart(3, "0")}.example.net/");`),
     // Longer than any host name can be
@@ -118,6 +118,15 @@ test("a version keeps a hundred web addresses and counts the rest", () => {
   assert.equal(result.detected.moreHosts, 50);
   // The notice still counts every one.
   assert.match(result.findings[0].message, / and 138 more\.$/);
+
+  // Long names fill 4 KB before they come to a hundred, and the notice's 1 KB.
+  const long = Array.from({ length: 100 }, (_, i) => `fetch("https://${"h".repeat(230)}${String(i).padStart(3, "0")}.example.net/");`);
+  const { detected, findings } = inspectXpi(xpi({ files: { "content/a.js": long.join("\n") } }), { listing: listing(), config });
+  assert.equal(detected.hosts.length, 16);
+  assert.ok(detected.hosts.join("").length <= 4096);
+  assert.equal(detected.moreHosts, 84);
+  assert.match(findings[0].message, / and 96 more\.$/);
+  assert.ok(findings[0].message.length < 1200);
 });
 
 test("the scan stops at the first error, and the file names findings quote are cut short", () => {

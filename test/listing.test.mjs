@@ -70,4 +70,11 @@ test("repo, URLs, categories and lengths are checked", () => {
     }),
   );
   assert.equal(errors.length, 4);
+
+  // Both are copied into the index, so they are kept short, and must be text.
+  for (const homepage of [`https://example.com/${"a".repeat(481)}`, ["https://example.com/"]]) {
+    assert.deepEqual(validateListing(listing({ homepage })), ['"homepage" must be an https:// address of up to 500 characters.']);
+  }
+  assert.equal(validateListing(listing({ privacyPolicy: `https://example.com/${"a".repeat(481)}` })).length, 1);
+  assert.deepEqual(validateListing(listing({ homepage: `https://example.com/${"a".repeat(480)}` })), []);
 });

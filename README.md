@@ -76,9 +76,9 @@ for example
 | `declares` | required | What the extension does, see [POLICY.md](POLICY.md#4-what-you-must-declare). `{}` if none of it. |
 | `publisher` | optional | The name people see. Defaults to the repository owner. |
 | `categories` | optional | Up to three of `ai`, `reading`, `writing`, `citations`, `notes`, `organization`, `import-export`, `appearance`, `integration`, `other`. |
-| `homepage` | optional | An `https://` page about the extension. |
+| `homepage` | optional | An `https://` page about the extension, its address up to 500 characters. |
 | `license` | optional | An SPDX id, such as `MIT` or `AGPL-3.0-or-later`. |
-| `privacyPolicy` | optional | An `https://` page; expected when `declares.sendsContent` is true. |
+| `privacyPolicy` | optional | An `https://` page, its address up to 500 characters; expected when `declares.sendsContent` is true. |
 | `publisherDomain` | optional | A domain you control, to be shown as a verified publisher (below). |
 | `delisted` | optional | `true` to stop publishing the extension (below). |
 
@@ -184,11 +184,13 @@ reads (see [scripts/lib/build.mjs](scripts/lib/build.mjs)):
 | `icons/<id>.png` or `.jpg` | The newest version's icon from its `manifest.json`: of its PNG and JPEG icons, the smallest of 64px or more, else the largest. SVG icons are never re-hosted, since one opened from the marketplace's address would run its scripts there. |
 | `report.json` | What was accepted and rejected, and why. |
 
-Each version names at most 100 of the web addresses found in its code, with a
-count of the rest. An extension whose entry in `index.json`, or whose update
-manifest, would take over 256 KB is left out, and the report says so; an
-`index.json` over 8 MB, more than Paperly can be relied on to download, stops
-the build and names the largest extensions in it.
+Each version names at most 100 of the web addresses found in its code, and
+no more than 4 KB of them, with a count of the rest. An extension whose entry
+in `index.json`, or whose update manifest, would take over 64 KB is left out,
+and the report says so. If `index.json` would still take over 8 MB, more than
+Paperly can be relied on to download, the largest extensions are left out
+until it does not, and the report says so for each; the blocks are never left
+out, and if they alone are too large the build stops.
 
 To try an extension in a local marketplace before releasing it, first write
 its listing, `extensions/<id>.json`: only listed extensions are built. (For a

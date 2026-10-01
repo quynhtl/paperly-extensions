@@ -48,6 +48,13 @@ export const REPO = /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/;
 
 const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
+/**
+ * The longest `homepage` or `privacyPolicy`. Both are copied into the index
+ * every copy of Paperly downloads, and a page's address needs nowhere near
+ * this.
+ */
+const MAX_URL_LENGTH = 500;
+
 function isHttpsURL(value) {
   try {
     return new URL(value).protocol === "https:";
@@ -112,8 +119,9 @@ export function validateListing(listing, { fileName } = {}) {
     }
   }
   for (const [key, value] of [["homepage", homepage], ["privacyPolicy", privacyPolicy]]) {
-    if (value !== undefined && !isHttpsURL(value)) {
-      errors.push(`"${key}" must be an https:// address.`);
+    // A string: new URL() would take a list, say, as the text it joins to.
+    if (value !== undefined && (typeof value !== "string" || value.length > MAX_URL_LENGTH || !isHttpsURL(value))) {
+      errors.push(`"${key}" must be an https:// address of up to ${MAX_URL_LENGTH} characters.`);
     }
   }
   if (license !== undefined && (typeof license !== "string" || !/^[A-Za-z0-9.+()\- ]{1,64}$/.test(license))) {

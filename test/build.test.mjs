@@ -253,8 +253,9 @@ test("when GitHub cannot be asked, the build stops instead of publishing less", 
   );
 });
 
-test("an extension too large for the index is left out, and an index too large stops the build", async () => {
-  // A hundred web addresses as long as host names go, in each of twelve versions
+test("an extension too large for the index is left out", async () => {
+  // As many web addresses as a version keeps, as long as host names go, in
+  // each of twenty versions
   const large = (v) =>
     xpi({
       manifest: manifest({ version: `1.${v}` }),
@@ -265,7 +266,7 @@ test("an extension too large for the index is left out, and an index too large s
   const other = listing({ id: "other@example.com" });
   const out = outDir();
   const { index, report } = await buildRegistry({
-    config: { ...config, versionsKept: 12 },
+    config: { ...config, versionsKept: 20 },
     listings: [
       { file: "hello@example.com.json", listing: listing() },
       { file: "other@example.com.json", listing: other },
@@ -273,26 +274,68 @@ test("an extension too large for the index is left out, and an index too large s
     blocked: {},
     candidates: async (l) =>
       l.id === "hello@example.com"
-        ? Array.from({ length: 12 }, (_, v) => release(`v1.${v}`, large(v)))
+        ? Array.from({ length: 20 }, (_, v) => release(`v1.${v}`, large(v)))
         : [release("v1", xpi({ manifest: manifest({ zotero: { id: l.id, update_url: `https://registry.test/updates/${l.id}.json` } }) }))],
     out,
   });
   assert.deepEqual(index.extensions.map((e) => e.id), ["other@example.com"]);
   assert.equal(report[0].listed, false);
-  assert.match(report[0].problems[0], /could not be built: its entry in index.json would take \d+ KB, and one extension may take 256 KB/);
+  assert.match(report[0].problems[0], /could not be built: its entry in index.json would take \d+ KB, and one extension may take 64 KB/);
   assert.equal(existsSync(join(out, "updates/hello@example.com.json")), false);
   assert.equal(existsSync(join(out, "files/hello@example.com")), false);
+});
 
-  const blocked = { "x@example.com": { versionRanges: ["*"], reason: "x".repeat(9 * 1024 * 1024) } };
-  await assert.rejects(
+test("an index too large leaves out its largest extensions, not the blocks", async () => {
+  // Entries of three sizes, by how many web addresses each version names
+  const hosts = { "large@example.com": 40, "medium@example.com": 20, "small@example.com": 0 };
+  const sized = (id) =>
+    xpi({
+      manifest: manifest({ zotero: { id, update_url: `https://registry.test/updates/${id}.json` } }),
+      files: {
+        "content/a.js": Array.from({ length: hosts[id] }, (_, i) => `fetch("https://${"h".repeat(60)}${i}.example.net/");`).join("\n"),
+      },
+    });
+  const build = (blocked, out = outDir()) =>
     buildRegistry({
       config,
-      listings: [{ file: "hello@example.com.json", listing: listing() }],
+      listings: Object.keys(hosts).map((id) => ({ file: `${id}.json`, listing: listing({ id }) })),
       blocked,
-      candidates: async () => [release("v1.0.0", xpiAt("1.0.0"))],
-      out: outDir(),
-    }),
-    (e) => e.fatal && /^index.json would take 9.0 MB, over the 8.0 MB .* hello@example.com \(1 KB\)\.$/.test(e.message),
+      candidates: async (l) => [release("v1", sized(l.id))],
+      out,
+    });
+  const size = (value) => Buffer.byteLength(JSON.stringify(value));
+
+  // A block whose reason fills the index to just over 8 MB: by less than the
+  // largest extension takes, and more than the next.
+  const { index: all } = await build({});
+  const entry = (id) => size(all.extensions.find((e) => e.id === id));
+  const block = (reason) => ({ "x@example.com": { versionRanges: ["*"], reason } });
+  const room = 8 * 1024 * 1024 - size({ ...all, blocked: block("") });
+  const blocked = block("x".repeat(room + entry("medium@example.com")));
+
+  const out = outDir();
+  const { index, report } = await build(blocked, out);
+  assert.deepEqual(index.extensions.map((e) => e.id), ["medium@example.com", "small@example.com"]);
+  assert.deepEqual(index.blocked, blocked);
+  const bytes = readFileSync(join(out, "index.json"));
+  assert.ok(bytes.length <= 8 * 1024 * 1024);
+  assert.deepEqual(JSON.parse(bytes).extensions.map((e) => e.id), ["medium@example.com", "small@example.com"]);
+  assert.deepEqual(report.map((e) => e.listed), [false, true, true]);
+  assert.deepEqual(report[0].versions, []);
+  assert.match(
+    report[0].problems[0],
+    /^Left out: index.json would be over the 8.0 MB Paperly can be relied on to download, and at \d+ KB this was the largest extension in it\.$/,
+  );
+  assert.equal(existsSync(join(out, "updates/large@example.com.json")), false);
+  assert.equal(existsSync(join(out, "files/large@example.com")), false);
+  assert.equal(existsSync(join(out, "updates/medium@example.com.json")), true);
+
+  // Blocks too large on their own stop the build: they are not to be left out.
+  await assert.rejects(
+    build(block("x".repeat(9 * 1024 * 1024))),
+    (e) =>
+      e.fatal &&
+      /^index.json would take 9.0 MB with no extension listed, over the 8.0 MB .*; blocked.json must be made smaller\.$/.test(e.message),
   );
 });
 

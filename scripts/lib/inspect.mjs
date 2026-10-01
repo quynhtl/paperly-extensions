@@ -134,11 +134,17 @@ const URL_IN_STRING = /["'`](?:https?|wss?):\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi
 const MAX_HOST_LENGTH = 253;
 
 /**
- * The most web addresses kept for one version, which are published with it;
- * the rest are counted. Code can mention millions, and each would be in the
- * index Paperly downloads.
+ * The most web addresses kept for one version, which are published with it,
+ * and the most characters they may take in all; the rest are counted. Code
+ * can mention millions, each up to 253 characters, and each kept would be in
+ * the index Paperly downloads.
  */
 const MAX_HOSTS = 100;
+const MAX_HOSTS_LENGTH = 4096;
+
+/** How many of the web addresses the listing does not declare a notice names, and in how many characters. */
+const NAMED_HOSTS = 12;
+const NAMED_HOSTS_LENGTH = 1024;
 
 /**
  * The most findings kept for one version, for the same reason, and because
@@ -179,6 +185,20 @@ const APP_VERSION = /^(?:\d+|\*)(?:\.(?:\d+|\*)){0,3}(?:[a-z][a-z0-9.+-]*)?$/i;
 // So all are kept short, with no number longer than 9 digits.
 function validVersion(version, pattern) {
   return typeof version === "string" && version.length <= MAX_VERSION_LENGTH && !/\d{10}/.test(version) && pattern.test(version);
+}
+
+/** The first of `hosts`, no more than `count` of them and `length` characters in all. */
+function firstHosts(hosts, count, length) {
+  const kept = [];
+  let total = 0;
+  for (const host of hosts) {
+    total += host.length;
+    if (kept.length >= count || total > length) {
+      break;
+    }
+    kept.push(host);
+  }
+  return kept;
 }
 
 function hostCovered(host, declared) {
@@ -383,10 +403,11 @@ export function inspectXpi(buffer, { listing, config }) {
     }
   }
   const allHosts = [...hosts].sort();
+  const keptHosts = firstHosts(allHosts, MAX_HOSTS, MAX_HOSTS_LENGTH);
   result.detected = {
     uses: [...uses].sort(),
-    hosts: allHosts.slice(0, MAX_HOSTS),
-    moreHosts: Math.max(0, allHosts.length - MAX_HOSTS),
+    hosts: keptHosts,
+    moreHosts: allHosts.length - keptHosts.length,
   };
 
   const declares = listing.declares || {};
@@ -397,9 +418,9 @@ export function inspectXpi(buffer, { listing, config }) {
   }
   const undeclaredHosts = allHosts.filter((h) => !hostCovered(h, declares.network || []));
   if (undeclaredHosts.length) {
-    const shown = undeclaredHosts.slice(0, 12).join(", ");
-    const more = undeclaredHosts.length > 12 ? ` and ${undeclaredHosts.length - 12} more` : "";
-    notice("undeclared-hosts", `The code mentions web addresses the listing does not declare: ${shown}${more}.`);
+    const shown = firstHosts(undeclaredHosts, NAMED_HOSTS, NAMED_HOSTS_LENGTH);
+    const more = undeclaredHosts.length > shown.length ? ` and ${undeclaredHosts.length - shown.length} more` : "";
+    notice("undeclared-hosts", `The code mentions web addresses the listing does not declare: ${shown.join(", ")}${more}.`);
   }
   if (declares.sendsContent && !listing.privacyPolicy) {
     warning("no-privacy-policy", "Sends content to web services, but gives no privacy policy.");

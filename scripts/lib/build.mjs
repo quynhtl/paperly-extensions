@@ -18,15 +18,18 @@ const ICON_EXTENSIONS = { "image/png": "png", "image/jpeg": "jpg" };
 
 /**
  * The most one extension's entry in index.json, or its update manifest, may
- * take. The checks keep what goes into them short, so an extension over this
- * got something past them, and is left out rather than make every copy of
- * Paperly download it.
+ * take. The checks keep what goes into them short: a listing with every
+ * field as long as it may be, and five versions each naming as many web
+ * addresses as are kept, come to under 64 KB, and most take a few. An
+ * extension over this got something past them, and is left out rather than
+ * make every copy of Paperly download it.
  */
-const MAX_ENTRY_BYTES = 256 * 1024;
+const MAX_ENTRY_BYTES = 64 * 1024;
 
 /**
  * The most index.json may take. Paperly gives up on a download after 30
- * seconds, and with the index it would lose every new block.
+ * seconds, and with the index it would lose every new block. Past this, the
+ * largest extensions are left out until the rest fit.
  */
 const MAX_INDEX_BYTES = 8 * 1024 * 1024;
 
@@ -140,11 +143,17 @@ function discard(out, id) {
  * written in the report, and it is left out. Otherwise one bad release would
  * hold back every other extension's updates, and blocked.json with them.
  *
+ * Nor can many of them: an index.json too large to publish leaves out the
+ * largest extensions until the rest fit, each saying so in the report.
+ * Anyone can have listings merged, as many as they have repositories, each
+ * as large as the checks allow; were that to stop the build, one account
+ * could hold back every block.
+ *
  * The exception is an error marked `fatal`, such as GitHub not answering:
  * that is not about one extension, and building on regardless would publish
  * a marketplace missing the ones GitHub did not answer for. It is thrown, so
- * that nothing is deployed and the site already up stays up. An index.json
- * too large to publish is one too, naming the largest extensions in it.
+ * that nothing is deployed and the site already up stays up. blocked.json
+ * too large to publish even with no extension listed is one too.
  */
 export async function buildRegistry({
   config,
@@ -162,6 +171,8 @@ export async function buildRegistry({
 
   const report = [];
   const extensions = [];
+  /** Each listed extension's entry in the report. */
+  const reported = new Map();
 
   /** One valid listing's index entry, with its files written; null if nothing passed. */
   async function buildExtension(listing, entry) {
@@ -319,6 +330,7 @@ export async function buildRegistry({
       const extension = await buildExtension(listing, entry);
       if (extension) {
         extensions.push(extension);
+        reported.set(extension, entry);
         entry.listed = true;
       }
     } catch (e) {
@@ -342,18 +354,38 @@ export async function buildRegistry({
   };
   // The signature covers these exact bytes, so they are written once and
   // never re-serialised.
-  const bytes = Buffer.from(JSON.stringify(index));
+  let bytes = Buffer.from(JSON.stringify(index));
   if (bytes.length > MAX_INDEX_BYTES) {
-    const largest = extensions
-      .map((e) => ({ id: e.id, size: Buffer.byteLength(JSON.stringify(e)) }))
-      .sort((a, b) => b.size - a.size)
-      .slice(0, 5)
-      .map((e) => `${e.id} (${kb(e.size)})`);
-    const e = new Error(
-      `index.json would take ${mb(bytes.length)}, over the ${mb(MAX_INDEX_BYTES)} Paperly can be relied on to download. The largest extensions in it: ${largest.join(", ") || "none"}.`,
-    );
-    e.fatal = true;
-    throw e;
+    // Largest first, so that whoever made the index too large is who is left
+    // out, and to leave out as few as can be.
+    const sizes = new Map(extensions.map((e) => [e, Buffer.byteLength(JSON.stringify(e))]));
+    const largest = [...extensions].sort((a, b) => sizes.get(b) - sizes.get(a) || a.id.localeCompare(b.id));
+    const left = new Set();
+    let size = bytes.length;
+    for (const extension of largest) {
+      if (size <= MAX_INDEX_BYTES) {
+        break;
+      }
+      const entry = reported.get(extension);
+      entry.problems.push(
+        `Left out: index.json would be over the ${mb(MAX_INDEX_BYTES)} Paperly can be relied on to download, and at ${kb(sizes.get(extension))} this was the largest extension in it.`,
+      );
+      entry.listed = false;
+      entry.versions = [];
+      discard(out, extension.id);
+      left.add(extension);
+      // Its entry, and the comma between it and the next.
+      size -= sizes.get(extension) + (left.size < extensions.length ? 1 : 0);
+    }
+    index.extensions = extensions.filter((e) => !left.has(e));
+    bytes = Buffer.from(JSON.stringify(index));
+    if (bytes.length > MAX_INDEX_BYTES) {
+      const e = new Error(
+        `index.json would take ${mb(bytes.length)} with no extension listed, over the ${mb(MAX_INDEX_BYTES)} Paperly can be relied on to download; blocked.json must be made smaller.`,
+      );
+      e.fatal = true;
+      throw e;
+    }
   }
   writeFileSync(join(out, "index.json"), bytes);
   if (signingKey) {
