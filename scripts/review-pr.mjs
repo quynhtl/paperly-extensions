@@ -9,7 +9,9 @@
 //
 // What is checked is the commit HEAD_SHA, the head the triggering event named,
 // and only that commit may be merged: the merge step passes the sha written
-// here to --match-head-commit, so GitHub refuses it if the head has moved.
+// here to --match-head-commit, so GitHub refuses it if the head has moved. It
+// is compared with the default branch as it is now, which is what the merge
+// lands on.
 import { appendFileSync } from "node:fs";
 import { loadConfig } from "./lib/config.mjs";
 import { download, listReleases, repoById } from "./lib/github.mjs";
@@ -139,9 +141,15 @@ if (before) {
   process.exit(0);
 }
 
+// What the merge lands on: the default branch now, not the pull request's
+// base.sha, which is where its branch started and moves only if the branch is
+// updated from it. Against that, a listing changed since would be judged by
+// what it was then.
+const mainSha = (await json(`/repos/${registry}/git/ref/heads/${encodePath(defaultBranch)}`)).object.sha;
+
 // The files of the checked commit itself, not of whatever the pull request
 // holds by the time they are asked for.
-const comparison = await json(`/repos/${registry}/compare/${pr.base.sha}...${HEAD_SHA}`);
+const comparison = await json(`/repos/${registry}/compare/${mainSha}...${HEAD_SHA}`);
 const files = (comparison.files ?? []).map((f) => ({
   filename: f.filename,
   status: f.status,
@@ -152,7 +160,7 @@ const review = await reviewSubmission({
   author: { login: pr.user.login, id: pr.user.id },
   files,
   readHead: (path) => readFile(pr.head.repo.full_name, path, HEAD_SHA),
-  readBase: (path) => readFile(registry, path, pr.base.sha),
+  readBase: (path) => readFile(registry, path, mainSha),
   resolveRepo: (repoId) => repoById(repoId, { token, fetch: apiFetch }),
   verifyPublisher,
   budgetLeft,

@@ -227,9 +227,12 @@ marketplace is refused by the real one, so release one built without
 | [test.yml](.github/workflows/test.yml) | Every pull request and push | `npm test` and every listing. |
 
 `listing.yml` holds a token that can write to this repository, so it runs only
-the base branch's scripts and reads the pull request's listings as data. It
-checks the one commit the pull request's event named, and merges only that
-commit: if anything is pushed while the check runs, nothing is merged.
+the default branch's scripts and reads the pull request's listings as data.
+It takes both the scripts and the listings to compare with from the default
+branch as it is when it runs, which is what a merge lands on, so a fix to the
+checks applies to pull requests already open. It checks the one commit the
+pull request's event named, and merges only that commit: if anything is
+pushed while the check runs, nothing is merged.
 
 ## Setting up the marketplace
 

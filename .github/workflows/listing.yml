@@ -4,7 +4,7 @@ name: Check listing
 # merges those that pass (see scripts/lib/review.mjs).
 #
 # pull_request_target gives this job a token that can write to the repository,
-# so it must never run code from the pull request. It checks out the base
+# so it must never run code from the pull request. It checks out the default
 # branch, and scripts/review-pr.mjs reads the pull request's listings through
 # the API as plain JSON.
 on:
@@ -26,9 +26,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # The default branch as it is now. The pull request's base.sha is where
+      # its branch started, and moves only if the branch is updated from it:
+      # checked out, a fix to the checks would not apply to pull requests
+      # opened before it.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
       - uses: actions/setup-node@v4
