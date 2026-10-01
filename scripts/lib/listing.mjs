@@ -38,6 +38,7 @@ const FIELDS = {
   homepage: "optional",
   license: "optional",
   privacyPolicy: "optional",
+  publisherDomain: "optional",
 };
 
 const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
@@ -71,7 +72,7 @@ export function validateListing(listing, { fileName } = {}) {
     }
   }
 
-  const { id, name, description, repo, publisher, categories, homepage, license, privacyPolicy } =
+  const { id, name, description, repo, publisher, categories, homepage, license, privacyPolicy, publisherDomain } =
     listing;
   if (id !== undefined) {
     if (typeof id !== "string" || !/^[A-Za-z0-9._@{}+-]{3,80}$/.test(id)) {
@@ -104,6 +105,12 @@ export function validateListing(listing, { fileName } = {}) {
   }
   if (license !== undefined && (typeof license !== "string" || !/^[A-Za-z0-9.+()\- ]{1,64}$/.test(license))) {
     errors.push('"license" must be an SPDX identifier, such as "MIT".');
+  }
+  if (
+    publisherDomain !== undefined &&
+    (typeof publisherDomain !== "string" || !HOST.test(publisherDomain) || /^[\d.]+$/.test(publisherDomain))
+  ) {
+    errors.push('"publisherDomain" must be a domain name you control, such as "example.org".');
   }
 
   const { declares } = listing;

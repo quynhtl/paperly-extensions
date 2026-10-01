@@ -11,6 +11,7 @@ import { slug, updateURL } from "./config.mjs";
 import { inspectXpi } from "./inspect.mjs";
 import { repoOwner, validateListing } from "./listing.mjs";
 import { sign } from "./sign.mjs";
+import { verifyPublisher as checkPublisherDomain } from "./verify.mjs";
 import { compareVersions } from "./version.mjs";
 
 const ICON_EXTENSIONS = { "image/png": "png", "image/svg+xml": "svg", "image/jpeg": "jpg" };
@@ -85,7 +86,16 @@ function updateManifest(id, versions) {
  * extension's releases, newest first: [{ label, released, problem, load }],
  * where `load()` resolves to the .xpi's bytes.
  */
-export async function buildRegistry({ config, listings, blocked, candidates, out, signingKey, now = new Date() }) {
+export async function buildRegistry({
+  config,
+  listings,
+  blocked,
+  candidates,
+  out,
+  signingKey,
+  verifyPublisher = checkPublisherDomain,
+  now = new Date(),
+}) {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(join(out, "updates"), { recursive: true });
 
@@ -176,11 +186,21 @@ export async function buildRegistry({ config, listings, blocked, candidates, out
 
     const owner = repoOwner(listing);
     const official = config.officialOwners.includes(owner);
+    const proof = await verifyPublisher(listing);
+    if (proof.problem) {
+      entry.problems.push(`Publisher not verified: ${proof.problem}`);
+    }
     extensions.push({
       id: listing.id,
       name: listing.name,
       description: listing.description,
-      publisher: { name: listing.publisher || owner, github: owner, official, verified: official },
+      publisher: {
+        name: listing.publisher || owner,
+        github: owner,
+        official,
+        verified: official || proof.verified,
+        domain: proof.verified ? proof.domain : null,
+      },
       repo: listing.repo,
       homepage: listing.homepage ?? null,
       license: listing.license ?? null,

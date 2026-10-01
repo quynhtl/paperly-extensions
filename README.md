@@ -72,6 +72,7 @@ for example
 | `homepage` | optional | An `https://` page about the extension. |
 | `license` | optional | An SPDX id, such as `MIT` or `AGPL-3.0-or-later`. |
 | `privacyPolicy` | optional | An `https://` page; expected when `declares.sendsContent` is true. |
+| `publisherDomain` | optional | A domain you control, to be shown as a verified publisher (below). |
 
 ## What is checked
 
@@ -89,6 +90,26 @@ Every version, before it is published
 
 The checks read the code; they cannot prove an extension is safe. They are
 there so that what an extension does is visible before someone installs it.
+
+## Verified publishers
+
+Paperly marks a publisher as verified when they prove they control a domain.
+Set `publisherDomain` in your listing and serve, from that domain,
+
+```
+https://<publisherDomain>/.well-known/paperly-extensions.json
+```
+
+```json
+{ "repos": ["your-name/your-extension"] }
+```
+
+listing the repository named in your listing (any others too). The file is
+fetched again on every publish, without following redirects; taking it down
+takes the badge away. Extensions published from the marketplace's own GitHub
+account are marked official.
+
+Verified says who publishes an extension. It doesn't say the extension is safe.
 
 ## Updates
 
@@ -183,5 +204,6 @@ Once, by a maintainer:
 | `scripts/build.mjs` | Builds and signs the published site. |
 | `scripts/keygen.mjs` | Makes the signing key pair. |
 | `scripts/review-pr.mjs` | Reviews a pull request in GitHub Actions. |
+| `scripts/lib/verify.mjs` | Checks a publisher's domain. |
 | `scripts/lib/` | The checks themselves, and a ZIP reader that never unpacks to disk. |
 | `test/` | `npm test`. |

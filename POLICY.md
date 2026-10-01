@@ -91,7 +91,14 @@ if you plan a closed-source extension, get legal advice first. Extensions that
 only talk to Paperly over a network API (for example through the local API)
 are not affected.
 
-## 7. Blocking and removal
+## 7. Verified publishers
+
+A publisher who proves control of a domain is shown as verified (see the
+README). The badge says who publishes the extension; the rules above apply to
+every extension alike, verified or not. Claiming a domain you don't control is
+impersonation, and gets every listing of yours blocked.
+
+## 8. Blocking and removal
 
 The maintainers can block any extension, or any range of its versions, at any
 time: for malware, for a broken security promise, for breaking these rules, or
