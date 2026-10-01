@@ -1,0 +1,10 @@
+{
+  "name": "hello-paperly",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A starting point for a Paperly extension.",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  }
+}

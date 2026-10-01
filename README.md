@@ -25,6 +25,10 @@ its hash, so what they get is exactly what was checked.
 
 ## List your extension
 
+New to Paperly extensions? Start from [`template/`](template), a working
+extension that already passes the checks, and follow
+[docs/getting-started.md](docs/getting-started.md).
+
 1. **Build it as a Paperly plugin**: an `.xpi` with a `manifest.json` and a
    `bootstrap.js`, the same format as a Zotero 7+ plugin. Its
    `applications.zotero` block needs an `id`, a `strict_min_version` and a
@@ -173,6 +177,8 @@ Once, by a maintainer:
 | `blocked.json` | The kill switch. |
 | `registry.json` | Where the marketplace is published, and which Paperly version the checks assume. |
 | `POLICY.md` | The rules. |
+| `template/` | A starting point for a new extension, with its own build script. |
+| `docs/` | Getting started, and the API an extension can use. |
 | `scripts/check.mjs` | Checks listings, and a built `.xpi` against its listing. |
 | `scripts/build.mjs` | Builds and signs the published site. |
 | `scripts/keygen.mjs` | Makes the signing key pair. |

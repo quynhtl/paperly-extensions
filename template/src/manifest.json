@@ -1,0 +1,19 @@
+{
+  "manifest_version": 2,
+  "name": "Hello Paperly",
+  "version": "1.0.0",
+  "description": "A starting point for a Paperly extension: a view in the Extensions window that lists what was added to the library last.",
+  "author": "Your name",
+  "homepage_url": "https://github.com/your-name/hello-paperly",
+  "icons": {
+    "96": "icon.svg"
+  },
+  "applications": {
+    "zotero": {
+      "id": "hello-paperly@example.com",
+      "update_url": "https://quynhtl.github.io/paperly-extensions/updates/hello-paperly@example.com.json",
+      "strict_min_version": "10.999",
+      "strict_max_version": "11.*"
+    }
+  }
+}

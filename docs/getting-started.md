@@ -1,0 +1,71 @@
+# Getting started
+
+From an empty folder to an extension people can install from Paperly's
+Extensions window. You need Node 18 or later, Paperly, and a GitHub account.
+
+## 1. Start from the template
+
+Copy [`template/`](../template) into a new repository. It is a complete
+extension that adds a view to the Extensions window, and it already passes the
+marketplace's checks.
+
+In `src/manifest.json`, set:
+
+- `applications.zotero.id`: your extension's permanent id, such as
+  `citation-check@your-domain.org`. An email-like id under a domain you control
+  avoids clashes. It can never change once the extension is listed.
+- `applications.zotero.update_url`:
+  `https://quynhtl.github.io/paperly-extensions/updates/<id>.json`. The build
+  prints the exact value if yours is wrong.
+- `name`, `description`, `author`, `homepage_url`, and `version`.
+- `strict_min_version` and `strict_max_version`: the Paperly versions you have
+  tested. `10.999` to `11.*` means every Paperly 11, development builds
+  included.
+
+## 2. Write it
+
+`src/bootstrap.js` is the extension. Paperly calls its `startup` when the
+extension starts (at launch, after installing, after enabling) and `shutdown`
+when it stops. Undo in `shutdown` whatever `startup` did.
+
+[The API guide](api.md) lists what you can use: your own view in the
+Extensions window, and the rest of Paperly through the `Zotero` object.
+
+## 3. Build and try it
+
+```sh
+npm run build              # dist/<id>-<version>.xpi
+```
+
+In Paperly: **Tools → Plugins**, the gear menu, **Install Plugin From File…**,
+and pick the `.xpi`. Open **Tools → Extensions…**: your extension is under
+Installed (marked as not from the marketplace, since you installed it by
+hand), and its view has a button in the bar on the left.
+
+While working, **Help → Debug Output Logging** shows what `Zotero.debug()`
+writes, and **Tools → Developer → Run JavaScript** lets you try code against
+the running app.
+
+## 4. Check it as the marketplace will
+
+Clone this repository and write your listing (see the
+[README](../README.md#the-listing-file)), then:
+
+```sh
+node scripts/check.mjs extensions/<id>.json --xpi path/to/your.xpi
+```
+
+Fix anything it marks `error`. Declare in the listing whatever it marks as a
+`warning` about something undeclared, or remove that code.
+
+## 5. Publish
+
+1. Push your repository to GitHub, public.
+2. Create a release whose tag is the version (`v1.0.0`), with the `.xpi`
+   attached.
+3. Open a pull request here adding `extensions/<id>.json`, from the GitHub
+   account that owns your repository.
+
+The pull request is checked automatically and merged when everything passes;
+your extension appears in Paperly within a few hours. Later versions need no
+pull request: publish a new release and the marketplace picks it up.
