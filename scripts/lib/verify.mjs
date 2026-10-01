@@ -11,8 +11,36 @@ export const WELL_KNOWN_PATH = "/.well-known/paperly-extensions.json";
 const MAX_BYTES = 64 * 1024;
 
 /**
+ * The body as text, or null as soon as it passes `max` bytes: a server that
+ * keeps sending is cut off there rather than read into memory.
+ */
+async function readCapped(response, max) {
+  if (!response.body) {
+    return "";
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    total += value.length;
+    if (total > max) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/**
  * Resolves to { verified, domain, problem }. Never throws: a domain that
  * cannot be reached simply leaves the publisher unverified, with the reason.
+ * The timeout covers the body too, so a server that answers and then stalls
+ * is given up on like one that never answers.
  */
 export async function verifyPublisher(listing, { fetch = globalThis.fetch, timeoutMs = 10000 } = {}) {
   const domain = listing.publisherDomain;
@@ -20,22 +48,23 @@ export async function verifyPublisher(listing, { fetch = globalThis.fetch, timeo
     return { verified: false, domain: null, problem: null };
   }
   const fail = (problem) => ({ verified: false, domain, problem });
-  let response;
+  let text;
   try {
-    response = await fetch(`https://${domain}${WELL_KNOWN_PATH}`, {
+    const response = await fetch(`https://${domain}${WELL_KNOWN_PATH}`, {
       headers: { Accept: "application/json", "User-Agent": "paperly-extensions" },
       // The proof has to come from the domain itself, not from wherever it sends us
       redirect: "error",
       signal: AbortSignal.timeout(timeoutMs),
     });
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      return fail(`https://${domain}${WELL_KNOWN_PATH} answered ${response.status}.`);
+    }
+    text = await readCapped(response, MAX_BYTES);
   } catch (e) {
-    return fail(`https://${domain}${WELL_KNOWN_PATH} could not be fetched (${e.name === "TimeoutError" ? "timed out" : e.message}).`);
+    return fail(`https://${domain}${WELL_KNOWN_PATH} could not be fetched (${e?.name === "TimeoutError" ? "timed out" : e?.message}).`);
   }
-  if (!response.ok) {
-    return fail(`https://${domain}${WELL_KNOWN_PATH} answered ${response.status}.`);
-  }
-  const text = await response.text();
-  if (text.length > MAX_BYTES) {
+  if (text === null) {
     return fail(`${WELL_KNOWN_PATH} on ${domain} is larger than ${MAX_BYTES} bytes.`);
   }
   let proof;

@@ -8,7 +8,10 @@ import { buildRegistry } from "../scripts/lib/build.mjs";
 import { validateListing } from "../scripts/lib/listing.mjs";
 import { config, listing, xpi } from "./helpers.mjs";
 
-/** A fetch that serves `body` (a string, or an Error to throw) and records what was asked. */
+/**
+ * A fetch that serves `body` (a string, a ReadableStream, or an Error to
+ * throw) and records what was asked.
+ */
 function fakeFetch(body, status = 200) {
   const calls = [];
   const fetch = async (url, options) => {
@@ -16,7 +19,7 @@ function fakeFetch(body, status = 200) {
     if (body instanceof Error) {
       throw body;
     }
-    return { ok: status >= 200 && status < 300, status, text: async () => body };
+    return new Response(body, { status });
   };
   return { fetch, calls };
 }
@@ -50,6 +53,31 @@ test("anything short of the repository in the file leaves the publisher unverifi
     assert.equal(result.verified, false);
     assert.match(result.problem, reason);
   }
+});
+
+test("a body that fails or never ends leaves the publisher unverified, without throwing", async () => {
+  // Headers arrive, then the connection drops.
+  const dropped = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"repos": ['));
+      controller.error(new TypeError("terminated"));
+    },
+  });
+  let result = await verifyPublisher(withDomain, fakeFetch(dropped));
+  assert.equal(result.verified, false);
+  assert.match(result.problem, /could not be fetched \(terminated\)/);
+
+  // A body that would go on for ever is cut off at the limit.
+  let sent = 0;
+  const endless = new ReadableStream({
+    pull(controller) {
+      sent += 16 * 1024;
+      controller.enqueue(new Uint8Array(16 * 1024).fill(0x20));
+    },
+  });
+  result = await verifyPublisher(withDomain, fakeFetch(endless));
+  assert.match(result.problem, /larger than/);
+  assert.ok(sent < 200 * 1024);
 });
 
 test("a listing's publisherDomain must be a domain name", () => {
