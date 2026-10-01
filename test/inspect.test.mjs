@@ -51,6 +51,42 @@ test("code from the internet and obfuscated code are rejected", () => {
   assert.deepEqual(codes(result, "error").sort(), ["obfuscated", "remote-code", "remote-code"]);
 });
 
+test("a script tag loading from the internet is found however it is written, and quickly", () => {
+  const tags = [
+    '<script type="module" src="https://cdn.example/lib.js"></script>',
+    `<script data-pad="${"x".repeat(5000)}" SRC = 'http://cdn.example/lib.js'>`,
+    '<script <script src="https://cdn.example/lib.js">',
+  ];
+  for (const tag of tags) {
+    const result = inspectXpi(xpi({ files: { "content/page.html": tag } }), { listing: listing(), config });
+    assert.deepEqual(codes(result, "error"), ["remote-code"], tag.slice(0, 40));
+  }
+  const local = '<script src="chrome://hello/content/a.js"></script><img src="https://example.com/a.png">';
+  assert.equal(inspectXpi(xpi({ files: { "content/page.html": local } }), { listing: listing(), config }).ok, true);
+
+  // A megabyte of "<script " with no ">" took a minute with a backtracking
+  // pattern; the release fits easily in the size limit once deflated.
+  const started = Date.now();
+  const result = inspectXpi(xpi({ files: { "content/page.html": "<script ".repeat(128 * 1024) } }), {
+    listing: listing(),
+    config,
+  });
+  assert.equal(result.ok, true);
+  assert.ok(Date.now() - started < 5000, `took ${Date.now() - started} ms`);
+});
+
+test("code too large to scan is refused without being read, and a broken archive stops the scan", () => {
+  const huge = inspectXpi(xpi({ files: { "content/big.js": "a".repeat(9 * 1024 * 1024) } }), { listing: listing(), config });
+  assert.deepEqual(codes(huge, "error"), ["file-too-large"]);
+
+  // Two damaged files: the first stops the scan.
+  const bytes = xpi({ files: { "content/a.js": "let a = 1;", "content/b.js": "let b = 2;" } });
+  for (const text of ["let a = 1;", "let b = 2;"]) {
+    bytes[bytes.indexOf(text)] ^= 1;
+  }
+  assert.deepEqual(codes(inspectXpi(bytes, { listing: listing(), config }), "error"), ["unreadable"]);
+});
+
 test("what the code uses is compared with what the listing declares", () => {
   const files = {
     "content/a.js": [

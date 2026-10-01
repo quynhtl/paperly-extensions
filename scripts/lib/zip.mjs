@@ -173,6 +173,13 @@ export function readZip(buffer, limits = {}) {
     if (entry.size > maxEntryBytes) {
       throw new ZipError(`${name} is too large to check (${entry.size} bytes)`);
     }
+    // Counted before inflating, from the size the directory states (which the
+    // inflated data must then match), so the cap bounds the work as well as
+    // the memory.
+    if (total + entry.size > maxTotalBytes) {
+      throw new ZipError("The archive inflates to more than can be checked");
+    }
+    total += entry.size;
     const o = entry.offset;
     if (o + 30 > buffer.length || buffer.readUInt32LE(o) !== LOCAL) {
       throw new ZipError(`${name} is damaged`);
@@ -200,10 +207,6 @@ export function readZip(buffer, limits = {}) {
     }
     if (data.length !== entry.size || crc32(data) !== entry.crc) {
       throw new ZipError(`${name} is damaged (its checksum does not match)`);
-    }
-    total += data.length;
-    if (total > maxTotalBytes) {
-      throw new ZipError("The archive inflates to more than can be checked");
     }
     return data;
   }

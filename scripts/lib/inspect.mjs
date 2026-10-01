@@ -72,8 +72,36 @@ const REMOTE_CODE = [
   /\bimportESModule\(\s*["'`]https?:/,
   /\bimport\(\s*["'`]https?:/,
   /\bimportScripts\(\s*["'`]https?:/,
-  /<script\b[^>]*\bsrc\s*=\s*["']https?:/i,
 ];
+
+/**
+ * Where a <script> tag with an http(s) src starts, or -1. A pattern such as
+ * /<script\b[^>]*\bsrc=/ goes over the rest of the text again at every
+ * "<script" that no ">" follows, so a few megabytes of them would take hours;
+ * this goes over the text once, remembering whether a <script tag is open.
+ */
+function remoteScriptTag(text) {
+  let open = -1;
+  for (const m of text.matchAll(/<script\b|>|\bsrc\s*=\s*["']https?:/gi)) {
+    if (m[0] === ">") {
+      open = -1;
+    } else if (m[0][0] === "<") {
+      if (open < 0) {
+        open = m.index;
+      }
+    } else if (open >= 0) {
+      return open;
+    }
+  }
+  return -1;
+}
+
+/**
+ * The most text of one file that is scanned. Every pattern runs over all of
+ * it, so this bounds the time one release can take; a larger file of code is
+ * refused, since what was not read cannot be vouched for.
+ */
+const MAX_SCANNED_BYTES = 8 * 1024 * 1024;
 
 /** Building code from text at run time. Bundled libraries do it harmlessly, so it is only noted. */
 const DYNAMIC_CODE = [/\beval\s*\(/, /\bnew\s+Function\s*\(/];
@@ -245,18 +273,30 @@ export function inspectXpi(buffer, { listing, config }) {
     if (!SCANNED.test(name)) {
       continue;
     }
+    const size = zip.entries.get(name).size;
+    if (size > MAX_SCANNED_BYTES) {
+      const mb = (n) => (n / 1024 / 1024).toFixed(1);
+      error("file-too-large", `${name} is ${mb(size)} MB; a file of code over ${mb(MAX_SCANNED_BYTES)} MB cannot be checked.`, name);
+      continue;
+    }
     let text;
     try {
       text = zip.read(name).toString("utf8");
     } catch (e) {
+      // The version is refused either way, and an archive that breaks one
+      // limit would only cost time on the rest.
       error("unreadable", `${name} cannot be read: ${e.message}`, name);
-      continue;
+      break;
     }
     for (const pattern of REMOTE_CODE) {
       const m = pattern.exec(text);
       if (m) {
         error("remote-code", `${name} loads code from the internet: ${snippetAround(text, m.index)}`, name);
       }
+    }
+    const script = remoteScriptTag(text);
+    if (script >= 0) {
+      error("remote-code", `${name} loads code from the internet: ${snippetAround(text, script)}`, name);
     }
     const obfuscated = text.match(OBFUSCATED);
     if (obfuscated && obfuscated.length >= OBFUSCATED_MIN) {

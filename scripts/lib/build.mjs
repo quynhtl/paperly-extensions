@@ -120,6 +120,13 @@ export async function buildRegistry({
 
   /** One valid listing's index entry, with its files written; null if nothing passed. */
   async function buildExtension(listing, entry) {
+    // Every version blocked: nothing to download or check.
+    const block = Object.hasOwn(blocked, listing.id) ? blocked[listing.id] : null;
+    if (block?.versionRanges.includes("*")) {
+      entry.problems.push(`Blocked: ${block.reason}`);
+      return null;
+    }
+
     let releases;
     try {
       releases = await candidates(listing);

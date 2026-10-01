@@ -80,6 +80,20 @@ test("blocked versions are not offered, and the block travels in the index", asy
   assert.equal(blockedReason({ x: { versionRanges: ["*"], reason: "r" } }, "x", "9"), "r");
 });
 
+test("an extension blocked in every version is not even downloaded", async () => {
+  const { index, report } = await buildRegistry({
+    config,
+    listings: [{ file: "hello@example.com.json", listing: listing() }],
+    blocked: { "hello@example.com": { versionRanges: ["*"], reason: "Malware." } },
+    candidates: async () => {
+      throw new Error("asked for releases");
+    },
+    out: outDir(),
+  });
+  assert.equal(index.extensions.length, 0);
+  assert.deepEqual(report[0].problems, ["Blocked: Malware."]);
+});
+
 test("only the newest versions are kept", async () => {
   const { index } = await buildRegistry({
     config: { ...config, versionsKept: 2 },
