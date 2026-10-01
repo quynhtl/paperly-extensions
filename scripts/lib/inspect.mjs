@@ -143,9 +143,13 @@ const ICON_TYPES = { png: "image/png", svg: "image/svg+xml", jpg: "image/jpeg", 
  * references: an entity declared as "&#60;script&#62;" is a script element
  * once the browser's parser expands it, though no "<script" is written. So
  * whatever could make the parser see other than what is written is refused
- * too: declarations (DOCTYPE, ENTITY, CDATA), processing instructions other
- * than the XML declaration, an encoding other than UTF-8, control
- * characters, and references other than XML's five predefined ones.
+ * too: declarations (DOCTYPE, ENTITY, CDATA), control characters, references
+ * other than XML's five predefined ones, and (in unsafeSVG) processing
+ * instructions and encodings other than UTF-8.
+ *
+ * The icon is anyone's text, so no pattern here may go back over it: each
+ * must cost time in proportion to the text, or be bounded, like
+ * XML_DECLARATION below.
  */
 const SVG_UNSAFE = [
   /<(?:[\w.-]+:)?script\b/i,
@@ -155,11 +159,27 @@ const SVG_UNSAFE = [
   /\bhref\s*=(?!\s*["']\s*#)/i,
   /url\(\s*["']?\s*(?!#)/i,
   /<!(?!--)/,
-  /<\?(?!xml\s)/i,
-  /<\?xml[^>]*\bencoding\s*=\s*["'](?!utf-8["'])/i,
   /[\0-\x08\x0b\x0c\x0e-\x1f]/,
   /&(?!(?:lt|gt|amp|quot|apos);)/,
 ];
+
+/**
+ * The XML declaration, which XML allows only at the very start of a file
+ * (the decoder below has already taken off any byte order mark). It is
+ * looked for there only, and up to a length no real one comes near: a
+ * pattern such as /<\?xml[^>]*encoding/ goes over the rest of the text again
+ * from every "<?xml" that no ">" follows, and took over a minute on an icon
+ * of a megabyte of them. A longer declaration is refused with every other
+ * "<?".
+ */
+const XML_DECLARATION = /^<\?xml[ \t\r\n][^>]{0,256}\?>/;
+
+/**
+ * The largest SVG icon that is shown. A drawing for a 96px icon takes a few
+ * kilobytes; the cap keeps the time the patterns take small whatever the
+ * icon holds, as MAX_SCANNED_BYTES does for code.
+ */
+const MAX_SVG_ICON_BYTES = 256 * 1024;
 
 /**
  * The elements of a drawing. Any other (an <a>, an <animate> that could turn
@@ -185,6 +205,13 @@ function unsafeSVG(data) {
     text = UTF8.decode(data);
   } catch {
     // Another encoding (UTF-16, say) would hide all of the above from the patterns.
+    return true;
+  }
+  // A declaration naming another encoding would have the browser read other
+  // markup than these patterns do. Any other "<?" is a processing
+  // instruction (a stylesheet, say), or a declaration where XML allows none.
+  const declaration = XML_DECLARATION.exec(text)?.[0] ?? "";
+  if (/\bencoding\s*=\s*["'](?!utf-8["'])/i.test(declaration) || text.includes("<?", declaration.length)) {
     return true;
   }
   if (SVG_UNSAFE.some((p) => p.test(text))) {
@@ -411,13 +438,22 @@ export function inspectXpi(buffer, { listing, config }) {
   const iconPath = pickIcon(manifest);
   if (iconPath) {
     const type = ICON_TYPES[iconPath.split(".").pop().toLowerCase()];
+    // The size the archive states, which zip.read holds the data to: an SVG
+    // icon over the cap is turned down before it is read, or any pattern runs.
+    const size = zip.entries.get(iconPath)?.size ?? 0;
+    const svgTooLarge = type === "image/svg+xml" && size > MAX_SVG_ICON_BYTES;
     let data = null;
     try {
-      data = type ? zip.read(iconPath) : null;
+      data = type && !svgTooLarge ? zip.read(iconPath) : null;
     } catch {
       data = null;
     }
-    if (data && type === "image/svg+xml" && unsafeSVG(data)) {
+    if (svgTooLarge) {
+      notice(
+        "icon-too-large",
+        `The icon ${iconPath} is ${Math.ceil(size / 1024)} KB; an SVG icon over ${MAX_SVG_ICON_BYTES / 1024} KB is not checked, so the marketplace does not show it.`,
+      );
+    } else if (data && type === "image/svg+xml" && unsafeSVG(data)) {
       notice(
         "icon-unsafe",
         `The icon ${iconPath} is more than a drawing (it holds scripts, event handlers, HTML, links, or markup the checks cannot read as written), so the marketplace does not show it.`,

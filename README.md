@@ -91,7 +91,7 @@ Every version, before it is published
 | --- | --- | --- |
 | not a readable `.xpi`, or over 20 MB | code that reads cookies, passwords or keys, starts programs, uses the clipboard or writes files without the listing declaring it | web addresses in the code that the listing doesn't declare |
 | `manifest.json` missing, invalid, or not `manifest_version` 2 | a version that doesn't run in the current Paperly | code built from text while running (`eval`, `new Function`) |
-| a file of code over 8 MB, too large to check | | an SVG icon that is more than a drawing (scripts, event handlers, HTML, links, a DOCTYPE or entities), which is then not shown |
+| a file of code over 8 MB, too large to check | | an SVG icon over 256 KB, or one that is more than a drawing (scripts, event handlers, HTML, links, a DOCTYPE or entities), which is then not shown |
 | an id other than the listing's | `sendsContent` without a `privacyPolicy` | |
 | an `update_url` other than the marketplace's | | |
 | no `strict_min_version`/`strict_max_version`, or no `bootstrap.js` | | |

@@ -87,12 +87,13 @@ test("code too large to scan is refused without being read, and a broken archive
   assert.deepEqual(codes(inspectXpi(bytes, { listing: listing(), config }), "error"), ["unreadable"]);
 });
 
+const withIcon = (svg) =>
+  inspectXpi(xpi({ manifest: manifest({ icons: { 96: "icon.svg" } }), files: { "icon.svg": svg } }), {
+    listing: listing(),
+    config,
+  });
+
 test("an SVG icon that is more than a picture is not shown", () => {
-  const withIcon = (svg) =>
-    inspectXpi(xpi({ manifest: manifest({ icons: { 96: "icon.svg" } }), files: { "icon.svg": svg } }), {
-      listing: listing(),
-      config,
-    });
   const unsafe = [
     '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
     '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>',
@@ -107,6 +108,10 @@ test("an SVG icon that is more than a picture is not shown", () => {
     '<svg xmlns="http://www.w3.org/2000/svg"><style><![CDATA[rect { fill: red }]]></style></svg>',
     '<?xml version="1.0"?><?xml-stylesheet href="https://evil.example/s.css"?><svg xmlns="http://www.w3.org/2000/svg"/>',
     '<?xml version="1.0" encoding="ISO-2022-JP"?><svg xmlns="http://www.w3.org/2000/svg"><title>\x1b$B\x1b(B</title></svg>',
+    // A declaration anywhere but at the very start, or too long to be read.
+    '<svg xmlns="http://www.w3.org/2000/svg"><?xml version="1.0" encoding="ISO-2022-JP"?></svg>',
+    ' <?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"/>',
+    `<?xml version="1.0"${" ".repeat(300)}?><svg xmlns="http://www.w3.org/2000/svg"/>`,
     // Elements that are not drawing, and resources from elsewhere.
     '<svg xmlns="http://www.w3.org/2000/svg"><set attributeName="fill" to="red"/></svg>',
     '<svg xmlns="http://www.w3.org/2000/svg" xmlns:h="http://www.w3.org/1999/xhtml"><h:iframe/></svg>',
@@ -135,6 +140,24 @@ test("an SVG icon that is more than a picture is not shown", () => {
     assert.equal(result.icon?.type, "image/svg+xml", svg);
     assert.deepEqual(result.findings, []);
   }
+});
+
+test("an SVG icon is checked quickly whatever it holds, and one over 256 KB is not shown", () => {
+  // "<?xml " with no ">" after it had a backtracking pattern go over the rest
+  // of the icon again from each one: seconds for the first, hours for a few
+  // megabytes, which deflate to a few kilobytes of .xpi.
+  for (const svg of [`<svg>${"<?xml ".repeat(40 * 1024)}`, "<?xml ".repeat(200 * 1000)]) {
+    const started = Date.now();
+    const result = withIcon(svg);
+    assert.ok(Date.now() - started < 1000, `took ${Date.now() - started} ms for ${svg.length} bytes`);
+    assert.equal(result.ok, true);
+    assert.equal(result.icon, null);
+  }
+
+  // A plain drawing, but too large to be checked.
+  const large = withIcon(`<svg xmlns="http://www.w3.org/2000/svg">${"<rect/>".repeat(40 * 1024)}</svg>`);
+  assert.equal(large.icon, null);
+  assert.deepEqual(codes(large), ["icon-too-large"]);
 });
 
 test("what the code uses is compared with what the listing declares", () => {
