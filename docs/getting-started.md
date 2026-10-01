@@ -1,7 +1,7 @@
 # Getting started
 
 From an empty folder to an extension people can install from Paperly's
-Extensions window. You need Node 18 or later, Paperly, and a GitHub account.
+Extensions window. You need Node 20 or later, Paperly, and a GitHub account.
 
 ## 1. Start from the template
 

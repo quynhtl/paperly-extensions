@@ -19,7 +19,7 @@ types/paperly.d.ts  Paperly's API, for TypeScript and editors
    `npm run build` tells you the exact value if it is wrong.
 2. **Write the extension** in `src/bootstrap.js`. The
    [API guide](https://github.com/quynhtl/paperly-extensions/blob/main/docs/api.md) lists what Paperly gives an extension.
-3. **Build** with `npm run build` (Node 18 or later, nothing to install).
+3. **Build** with `npm run build` (Node 20 or later, nothing to install).
 4. **Try it** in Paperly: Tools → Plugins, then the gear menu → Install Plugin
    From File…, and pick the `.xpi`. Its view appears in Tools → Extensions….
    To try it from a local test marketplace instead, build with

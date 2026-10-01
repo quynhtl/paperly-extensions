@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Packs src/ into dist/<id>-<version>.xpi: the file to attach to a GitHub
-// release. Needs Node 18 or later and nothing else.
+// release. Needs Node 20 or later and nothing else.
 //
 //   node scripts/build.mjs
 //
