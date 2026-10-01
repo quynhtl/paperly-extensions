@@ -15,10 +15,13 @@ before they install it.
 ## 1. Who can list
 
 - Anyone with a public GitHub repository that holds the extension's source.
-- The listing must be submitted by the owner of that repository: the user who
-  owns it, or a public member of the organisation that owns it.
+- The listing must be submitted by the owner of that repository. A listing for
+  a repository a user owns is merged as soon as it passes the checks; one for
+  a repository an organisation owns is merged by a maintainer, once they know
+  the person asking speaks for the organisation.
 - One listing per extension id. The id is the one in your `manifest.json`
-  (`applications.zotero.id`) and cannot be changed later.
+  (`applications.zotero.id`) and cannot be changed later, and neither can the
+  repository without a maintainer's agreement.
 
 ## 2. What you agree to
 

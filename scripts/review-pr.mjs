@@ -12,7 +12,7 @@
 // here to --match-head-commit, so GitHub refuses it if the head has moved.
 import { appendFileSync } from "node:fs";
 import { loadConfig } from "./lib/config.mjs";
-import { download, listReleases } from "./lib/github.mjs";
+import { download, listReleases, repoById } from "./lib/github.mjs";
 import { inspectXpi } from "./lib/inspect.mjs";
 import { reviewSubmission } from "./lib/review.mjs";
 
@@ -116,24 +116,15 @@ const files = (comparison.files ?? []).map((f) => ({
 }));
 
 const review = await reviewSubmission({
-  author: pr.user.login,
+  author: { login: pr.user.login, id: pr.user.id },
   files,
   readHead: (path) => readFile(pr.head.repo.full_name, path, HEAD_SHA),
   readBase: (path) => readFile(registry, path, pr.base.sha),
-  async ownerAllows(owner, author) {
-    if (owner.toLowerCase() === author.toLowerCase()) {
-      return true;
-    }
-    // An organisation's repository: the author must be a public member.
-    const response = await fetch(`https://api.github.com/orgs/${encodeURIComponent(owner)}/public_members/${encodeURIComponent(author)}`, {
-      headers: { "User-Agent": "paperly-extensions", Authorization: `Bearer ${token}` },
-    });
-    return response.status === 204;
-  },
+  resolveRepo: (repoId) => repoById(repoId, { token }),
   async checkRelease(listing) {
     let releases;
     try {
-      releases = await listReleases(listing.repo, { token });
+      releases = await listReleases(listing.repoId, { token });
     } catch (e) {
       return { ok: false, problem: e.message };
     }

@@ -37,6 +37,12 @@ test("missing and unknown fields are both errors", () => {
   assert.ok(errors.some((e) => e.includes('Unknown field "verified"')));
 });
 
+test("repoId is a repository's positive numeric id", () => {
+  for (const repoId of ["101", 0, -1, 1.5, 2 ** 60]) {
+    assert.match(validateListing(listing({ repoId }))[0], /"repoId" must be/, String(repoId));
+  }
+});
+
 test("the file is named after the id", () => {
   assert.match(validateListing(listing(), { fileName: "hello.json" })[0], /hello@example\.com\.json/);
   assert.equal(slug("{8c9d-11}"), "_8c9d-11_");

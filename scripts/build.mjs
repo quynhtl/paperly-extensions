@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { ROOT, loadConfig } from "./lib/config.mjs";
 import { buildRegistry, validateBlocked } from "./lib/build.mjs";
-import { download, listReleases } from "./lib/github.mjs";
+import { download, listReleases, repoById } from "./lib/github.mjs";
 
 const { values } = parseArgs({
   options: {
@@ -88,7 +88,20 @@ async function candidates(listing) {
       },
     ];
   }
-  const releases = await listReleases(listing.repo, { token: process.env.GITHUB_TOKEN, want: config.versionsKept });
+  // By the repository's id: if its owner gave up the name and someone else
+  // registered it, a fetch by name would publish the newcomer's releases as
+  // updates for everyone who has the extension.
+  const token = process.env.GITHUB_TOKEN;
+  const repo = await repoById(listing.repoId, { token });
+  if (!repo) {
+    throw new Error(`Repository ${listing.repoId} (${listing.repo}) no longer exists, or is not public.`);
+  }
+  if (repo.fullName.toLowerCase() !== listing.repo.toLowerCase()) {
+    throw new Error(
+      `Repository ${listing.repoId} is now ${repo.fullName}, not ${listing.repo}; the listing must be updated, and a maintainer must agree, before it is published again.`,
+    );
+  }
+  const releases = await listReleases(listing.repoId, { token, want: config.versionsKept });
   return releases.map((r) => ({
     label: r.tag,
     released: r.released,

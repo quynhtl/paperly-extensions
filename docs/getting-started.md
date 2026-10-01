@@ -63,8 +63,11 @@ Fix anything it marks `error`. Declare in the listing whatever it marks as a
 1. Push your repository to GitHub, public.
 2. Create a release whose tag is the version (`v1.0.0`), with the `.xpi`
    attached.
-3. Open a pull request here adding `extensions/<id>.json`, from the GitHub
-   account that owns your repository.
+3. Put your repository's numeric id in the listing as `repoId`;
+   `node scripts/check.mjs --repo-id your-name/your-repo` prints it.
+4. Open a pull request here adding `extensions/<id>.json`, from the GitHub
+   account that owns your repository. (A repository owned by an organisation
+   is listed by a maintainer, so that pull request waits for one.)
 
 The pull request is checked automatically and merged when everything passes;
 your extension appears in Paperly within a few hours. Later versions need no

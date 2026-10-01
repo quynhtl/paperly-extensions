@@ -32,6 +32,7 @@ const FIELDS = {
   name: "required",
   description: "required",
   repo: "required",
+  repoId: "required",
   declares: "required",
   publisher: "optional",
   categories: "optional",
@@ -40,6 +41,9 @@ const FIELDS = {
   privacyPolicy: "optional",
   publisherDomain: "optional",
 };
+
+/** A GitHub repository's full name, owner/name. */
+export const REPO = /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/;
 
 const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
@@ -72,7 +76,7 @@ export function validateListing(listing, { fileName } = {}) {
     }
   }
 
-  const { id, name, description, repo, publisher, categories, homepage, license, privacyPolicy, publisherDomain } =
+  const { id, name, description, repo, repoId, publisher, categories, homepage, license, privacyPolicy, publisherDomain } =
     listing;
   if (id !== undefined) {
     if (typeof id !== "string" || !/^[A-Za-z0-9._@{}+-]{3,80}$/.test(id)) {
@@ -87,8 +91,11 @@ export function validateListing(listing, { fileName } = {}) {
   if (description !== undefined && (typeof description !== "string" || !description.trim() || description.length > 250)) {
     errors.push('"description" must be up to 250 characters.');
   }
-  if (repo !== undefined && (typeof repo !== "string" || !/^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/.test(repo))) {
+  if (repo !== undefined && (typeof repo !== "string" || !REPO.test(repo))) {
     errors.push('"repo" must be a GitHub repository, as "owner/name".');
+  }
+  if (repoId !== undefined && (!Number.isSafeInteger(repoId) || repoId <= 0)) {
+    errors.push('"repoId" must be the repository\'s numeric id; node scripts/check.mjs --repo-id owner/name prints it.');
   }
   if (publisher !== undefined && (typeof publisher !== "string" || !publisher.trim() || publisher.length > 50)) {
     errors.push('"publisher" must be up to 50 characters.');
@@ -134,7 +141,11 @@ export function validateListing(listing, { fileName } = {}) {
   return errors;
 }
 
-/** The repository owner, which is who may submit and change a listing. */
+/**
+ * The repository owner's name, as the listing gives it. Who may submit and
+ * change a listing is decided by `repoId` and GitHub's numeric user ids, not
+ * by this name, which its owner can give up and someone else register.
+ */
 export function repoOwner(listing) {
   return String(listing.repo).split("/")[0];
 }

@@ -5,19 +5,37 @@
 //   node scripts/check.mjs                                  every listing
 //   node scripts/check.mjs extensions/my-ext@me.org.json    one listing
 //   node scripts/check.mjs extensions/my-ext@me.org.json --xpi build/my-ext.xpi
+//   node scripts/check.mjs --repo-id owner/name             the repoId to list
 //
 // Exits 1 if anything would keep the listing or the version out.
 import { readFileSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 import { ROOT, loadConfig } from "./lib/config.mjs";
-import { validateListing } from "./lib/listing.mjs";
+import { REPO, validateListing } from "./lib/listing.mjs";
 import { inspectXpi } from "./lib/inspect.mjs";
+import { repoByName } from "./lib/github.mjs";
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { xpi: { type: "string" } },
+  options: { xpi: { type: "string" }, "repo-id": { type: "string" } },
 });
+
+if (values["repo-id"] !== undefined) {
+  const name = values["repo-id"];
+  if (!REPO.test(name)) {
+    console.error(`--repo-id takes a repository as owner/name, not "${name}".`);
+    process.exit(2);
+  }
+  const repo = await repoByName(name, { token: process.env.GITHUB_TOKEN });
+  if (!repo) {
+    console.error(`${name} was not found, or is not public.`);
+    process.exit(1);
+  }
+  console.log(`${repo.fullName}, owned by the ${repo.owner.type === "User" ? "user" : "organisation"} ${repo.owner.login}:`);
+  console.log(`  "repoId": ${repo.id}`);
+  process.exit(0);
+}
 
 const config = loadConfig();
 const files = positionals.length

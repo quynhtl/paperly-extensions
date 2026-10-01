@@ -15,6 +15,7 @@ export function listing(overrides = {}) {
     name: "Hello",
     description: "Says hello.",
     repo: "someone/hello",
+    repoId: 101,
     declares: {},
     ...overrides,
   };

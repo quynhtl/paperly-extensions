@@ -90,22 +90,50 @@ async function readJSON(response, path) {
   }
 }
 
+function describe(repo, path) {
+  if (!Number.isSafeInteger(repo?.id) || typeof repo.full_name !== "string" || !repo.owner) {
+    throw new GitHubError(`GitHub's answer for ${path} is not a repository`);
+  }
+  const { login, id, type } = repo.owner;
+  return { id: repo.id, fullName: repo.full_name, owner: { login, id, type } };
+}
+
 /**
- * Published releases, newest first, each with the .xpi to check. Drafts and
- * pre-releases are skipped; so is a release with no .xpi, or with more than
- * one (which would leave it unclear what to publish).
+ * The public repository with this numeric id, as { id, fullName, owner:
+ * { login, id, type } }, or null if there is none. The id stays with a
+ * repository through renames and transfers and is never given to another, so
+ * listings are tied to it rather than to a name someone else could register.
+ */
+export async function repoById(repoId, { token, fetch, wait } = {}) {
+  const path = `/repositories/${Number(repoId)}`;
+  const response = await get(path, { token, fetch, wait });
+  return GONE.has(response.status) ? null : describe(await readJSON(response, path), path);
+}
+
+/** The same for a repository's full name, owner/name: how a developer finds their repository's id. */
+export async function repoByName(fullName, { token, fetch, wait } = {}) {
+  const path = `/repos/${fullName}`;
+  const response = await get(path, { token, fetch, wait });
+  return GONE.has(response.status) ? null : describe(await readJSON(response, path), path);
+}
+
+/**
+ * Published releases of the repository with the numeric id `repoId`, newest
+ * first, each with the .xpi to check. Drafts and pre-releases are skipped; so
+ * is a release with no .xpi, or with more than one (which would leave it
+ * unclear what to publish).
  *
  * Pages are read until `want` published releases are found or there are no
  * more, at most `maxPages` of them: a run of betas marked pre-release must not
  * hide the last stable version.
  */
-export async function listReleases(repo, { token, fetch, wait, want = 1, maxPages = 5 } = {}) {
+export async function listReleases(repoId, { token, fetch, wait, want = 1, maxPages = 5 } = {}) {
   const out = [];
   for (let page = 1; page <= maxPages; page++) {
-    const path = `/repos/${repo}/releases?per_page=${PAGE}&page=${page}`;
+    const path = `/repositories/${Number(repoId)}/releases?per_page=${PAGE}&page=${page}`;
     const response = await get(path, { token, fetch, wait });
     if (GONE.has(response.status)) {
-      throw new Error(`${repo} was not found, or is not public`);
+      throw new Error(`Repository ${repoId} was not found, or is not public`);
     }
     const releases = await readJSON(response, path);
     if (!Array.isArray(releases)) {

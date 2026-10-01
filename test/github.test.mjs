@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GitHubError, listReleases } from "../scripts/lib/github.mjs";
+import { GitHubError, listReleases, repoById } from "../scripts/lib/github.mjs";
 
 const release = (tag, extra = {}) => ({
   tag_name: tag,
@@ -71,4 +71,22 @@ test("a failure that persists, or is no rate limit, stops the build", async () =
 test("a repository that is gone lists nothing, without stopping the build", async () => {
   const { fetch } = fakeFetch(() => ({ status: 404, body: { message: "Not Found" } }));
   await assert.rejects(listReleases("someone/hello", { fetch }), (e) => !e.fatal && /not found/.test(e.message));
+});
+
+test("repositories and their releases are found by numeric id", async () => {
+  const { fetch, urls } = fakeFetch((url) =>
+    url.endsWith("/repositories/101")
+      ? { body: { id: 101, full_name: "someone/hello", owner: { login: "someone", id: 1, type: "User" } } }
+      : url.includes("/repositories/101/releases")
+        ? { body: [release("v1.0.0")] }
+        : { status: 404, body: { message: "Not Found" } },
+  );
+  assert.deepEqual(await repoById(101, { fetch }), {
+    id: 101,
+    fullName: "someone/hello",
+    owner: { login: "someone", id: 1, type: "User" },
+  });
+  assert.equal(await repoById(102, { fetch }), null);
+  assert.deepEqual((await listReleases(101, { fetch })).map((r) => r.tag), ["v1.0.0"]);
+  assert.match(urls[0], /^https:\/\/api\.github\.com\/repositories\/101$/);
 });

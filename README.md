@@ -51,8 +51,10 @@ extension that already passes the checks, and follow
    node scripts/check.mjs extensions/<id>.json --xpi path/to/your.xpi
    ```
 
-5. **Open a pull request** adding `extensions/<id>.json` (below). It must
-   come from the owner of the repository named in it.
+5. **Open a pull request** adding `extensions/<id>.json` (below), from the
+   GitHub account that owns the repository named in it. A repository owned by
+   an organisation is listed by a maintainer: its pull request stays open
+   until one has looked at it.
 
 ## The listing file
 
@@ -66,6 +68,7 @@ for example
 | `name` | required | Up to 50 characters. |
 | `description` | required | Up to 250 characters. |
 | `repo` | required | `owner/name` of the public GitHub repository with the releases. |
+| `repoId` | required | That repository's numeric id. It stays with the repository when it or its owner is renamed, so the listing can never point at someone else who takes the old name. `node scripts/check.mjs --repo-id owner/name` prints it, and so does `https://api.github.com/repos/owner/name` (its `"id"`). |
 | `declares` | required | What the extension does, see [POLICY.md](POLICY.md#4-what-you-must-declare). `{}` if none of it. |
 | `publisher` | optional | The name people see. Defaults to the repository owner. |
 | `categories` | optional | Any of `ai`, `reading`, `writing`, `citations`, `notes`, `organization`, `import-export`, `appearance`, `integration`, `other`. |
@@ -171,7 +174,7 @@ otherwise the add-on manager installs the extension but keeps it disabled.
 
 | Workflow | When | What |
 | --- | --- | --- |
-| [listing.yml](.github/workflows/listing.yml) | A pull request touches `extensions/` | Checks the listings and the newest release of each, comments with the result, and merges when everything passes and the author owns every repository involved ([scripts/lib/review.mjs](scripts/lib/review.mjs)). Anything else waits for a maintainer. |
+| [listing.yml](.github/workflows/listing.yml) | A pull request touches `extensions/` | Checks the listings and the newest release of each, comments with the result, and merges when everything passes and the author owns every repository involved, going by GitHub's numeric ids rather than names ([scripts/lib/review.mjs](scripts/lib/review.mjs)). Anything else waits for a maintainer, including a repository owned by an organisation, and a listing moved to another repository. |
 | [publish.yml](.github/workflows/publish.yml) | Push to `main`, every three hours, or by hand | Builds, signs and deploys the site to GitHub Pages. If GitHub cannot be asked about every listing, nothing is deployed and the site already up stays up. |
 | [test.yml](.github/workflows/test.yml) | Every pull request and push | `npm test` and every listing. |
 
