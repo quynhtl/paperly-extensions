@@ -134,10 +134,12 @@ node scripts/build.mjs --out dist --base-url http://127.0.0.1:8765/ \
 python3 -m http.server 8765 -d dist
 ```
 
-then point a test profile of Paperly at it (set
+then point a test profile of Paperly at it: set
 `extensions.zotero.paperlyExtensions.registryURL` to the base URL and
-`extensions.zotero.paperlyExtensions.publicKey` to the public key). For this the
-`.xpi`'s `update_url` must use the local base URL too.
+`extensions.zotero.paperlyExtensions.publicKey` to the public key. The `.xpi`'s
+`update_url` must use the local base URL too, and because that is plain HTTP,
+the test profile also needs `extensions.checkUpdateSecurity` set to `false`;
+otherwise the add-on manager installs the extension but keeps it disabled.
 
 ## What runs on GitHub
 
