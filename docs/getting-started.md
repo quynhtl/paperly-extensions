@@ -17,8 +17,9 @@ In `src/manifest.json`, set:
   your GitHub login. It can never change once the extension is listed. A new
   listing is merged automatically only when its id ends in
   `@<your-login>.github.io`, or in `@` a domain you have verified as your
-  `publisherDomain` (see the [README](../README.md#verified-publishers)); any
-  other id waits for a maintainer.
+  `publisherDomain` by serving a file there that lists your repository's
+  numeric id (see the [README](../README.md#verified-publishers)); any other
+  id waits for a maintainer.
 - `applications.zotero.update_url`:
   `https://quynhtl.github.io/paperly-extensions/updates/<id>.json`. The build
   prints the exact value if yours is wrong.

@@ -1,11 +1,17 @@
 // Verified publishers: a publisher proves they control a domain by serving
 //
 //   https://<publisherDomain>/.well-known/paperly-extensions.json
-//   { "repos": ["owner/name", ...] }
+//   { "repoIds": [123456789, ...] }
 //
-// naming the listing's repository. It is checked again on every publish, so
-// taking the file down takes the badge away. Verified says who publishes an
-// extension -- not that the extension is safe.
+// listing the listing's repository by its numeric id, its repoId. Names are
+// not accepted: a user or repository name can be given up and registered
+// again by someone else, who would then match a proof that named it, and so
+// be shown as the domain's publisher and have new ids under the domain merged
+// automatically (see review.mjs). An id stays with its repository.
+//
+// It is checked again on every publish, so taking the file down takes the
+// badge away. Verified says who publishes an extension -- not that the
+// extension is safe.
 
 export const WELL_KNOWN_PATH = "/.well-known/paperly-extensions.json";
 const MAX_BYTES = 64 * 1024;
@@ -73,13 +79,11 @@ export async function verifyPublisher(listing, { fetch = globalThis.fetch, timeo
   } catch {
     return fail(`${WELL_KNOWN_PATH} on ${domain} is not valid JSON.`);
   }
-  // Strings only: whoever runs the domain writes this file, and String() of
-  // an object such as {"toString": 1} throws instead of giving a name.
-  const repos = Array.isArray(proof?.repos)
-    ? proof.repos.filter((r) => typeof r === "string").map((r) => r.toLowerCase())
-    : [];
-  if (!repos.includes(listing.repo.toLowerCase())) {
-    return fail(`${WELL_KNOWN_PATH} on ${domain} does not list ${listing.repo}.`);
+  // Whole numbers only: whoever runs the domain writes this file, and nothing
+  // else is a repository's id.
+  const ids = Array.isArray(proof?.repoIds) ? proof.repoIds.filter((id) => Number.isSafeInteger(id)) : [];
+  if (!ids.includes(listing.repoId)) {
+    return fail(`${WELL_KNOWN_PATH} on ${domain} does not list repository ${listing.repoId} (${listing.repo}) in "repoIds".`);
   }
   return { verified: true, domain, problem: null };
 }

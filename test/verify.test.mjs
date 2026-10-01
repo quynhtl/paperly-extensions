@@ -26,8 +26,8 @@ function fakeFetch(body, status = 200) {
 
 const withDomain = listing({ publisherDomain: "example.org" });
 
-test("a domain that lists the repository verifies its publisher", async () => {
-  const { fetch, calls } = fakeFetch(JSON.stringify({ repos: ["Someone/Hello"] }));
+test("a domain that lists the repository's id verifies its publisher", async () => {
+  const { fetch, calls } = fakeFetch(JSON.stringify({ repoIds: [7, 101] }));
   assert.deepEqual(await verifyPublisher(withDomain, { fetch }), { verified: true, domain: "example.org", problem: null });
   assert.equal(calls[0].url, `https://example.org${WELL_KNOWN_PATH}`);
   // A redirect could hand the proof to another host
@@ -40,15 +40,21 @@ test("no domain, no check", async () => {
   assert.equal(calls.length, 0);
 });
 
-test("anything short of the repository in the file leaves the publisher unverified, with the reason", async () => {
+test("anything short of the repository's id in the file leaves the publisher unverified, with the reason", async () => {
+  const notListed = /does not list repository 101 \(someone\/hello\)/;
   const cases = [
-    [fakeFetch(JSON.stringify({ repos: ["someone/other"] })), /does not list someone\/hello/],
+    [fakeFetch(JSON.stringify({ repoIds: [102] })), notListed],
     [fakeFetch("not json"), /not valid JSON/],
     [fakeFetch("", 404), /answered 404/],
     [fakeFetch(new TypeError("redirect mode is set to error")), /could not be fetched/],
     [fakeFetch("x".repeat(70 * 1024)), /larger than/],
-    // Entries that are not names, one of which String() cannot convert.
-    [fakeFetch(JSON.stringify({ repos: [{ toString: 1 }, ["someone/hello"], null] })), /does not list someone\/hello/],
+    // The repository by name: whoever registers a name given up would match it.
+    [fakeFetch(JSON.stringify({ repos: ["someone/hello"] })), notListed],
+    // Entries that are not whole numbers, one of which String() cannot convert.
+    [fakeFetch(JSON.stringify({ repoIds: ["101", 101.5, [101], { toString: 1, valueOf: 1 }, null, 1e400] })), notListed],
+    [fakeFetch(JSON.stringify({ repoIds: { 0: 101, length: 1 } })), notListed],
+    [fakeFetch("null"), notListed],
+    [fakeFetch("[101]"), notListed],
   ];
   for (const [{ fetch }, reason] of cases) {
     const result = await verifyPublisher(withDomain, { fetch });
@@ -61,7 +67,7 @@ test("a body that fails or never ends leaves the publisher unverified, without t
   // Headers arrive, then the connection drops.
   const dropped = new ReadableStream({
     start(controller) {
-      controller.enqueue(new TextEncoder().encode('{"repos": ['));
+      controller.enqueue(new TextEncoder().encode('{"repoIds": ['));
       controller.error(new TypeError("terminated"));
     },
   });

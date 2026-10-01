@@ -110,13 +110,15 @@ https://<publisherDomain>/.well-known/paperly-extensions.json
 ```
 
 ```json
-{ "repos": ["your-name/your-extension"] }
+{ "repoIds": [123456789] }
 ```
 
-listing the repository named in your listing (any others too). The file is
-fetched again on every publish, without following redirects; taking it down
-takes the badge away. Extensions published from the marketplace's own GitHub
-account are marked official.
+listing your repository by its numeric id, the `repoId` in your listing (any
+others too; `node scripts/check.mjs --repo-id owner/name` prints one). Names
+do not count: a name given up can be registered again by someone else, while
+an id stays with its repository. The file is fetched again on every publish,
+without following redirects; taking it down takes the badge away. Extensions
+published from the marketplace's own GitHub account are marked official.
 
 A verified domain also lets a new listing whose id is under it, such as
 `my-extension@example.org` or `my-extension@tools.example.org` for

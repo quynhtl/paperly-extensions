@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { reviewSubmission } from "../scripts/lib/review.mjs";
+import { verifyPublisher as verifyDomain } from "../scripts/lib/verify.mjs";
 import { slug } from "../scripts/lib/config.mjs";
 import { listing } from "./helpers.mjs";
 
@@ -14,11 +15,18 @@ const REPOS = {
   201: { fullName: "acme/hello", owner: { login: "acme", id: 50, type: "Organization" } },
 };
 
-/** Only example.org serves a proof, and only for someone/hello. */
-const verifyPublisher = async (l) =>
-  l.publisherDomain === "example.org" && l.repo === "someone/hello"
-    ? { verified: true, domain: l.publisherDomain, problem: null }
-    : { verified: false, domain: l.publisherDomain, problem: "answered 404." };
+/**
+ * The proofs domains serve, checked as verify.mjs checks them: example.org's
+ * lists someone/hello by id; example.com's, by name only.
+ */
+const PROOFS = { "example.org": { repoIds: [101] }, "example.com": { repos: ["newowner/hello"] } };
+const verifyPublisher = (l) =>
+  verifyDomain(l, {
+    fetch: async (url) => {
+      const proof = PROOFS[new URL(url).hostname];
+      return proof ? new Response(JSON.stringify(proof)) : new Response("", { status: 404 });
+    },
+  });
 
 function review({ author = "someone", files, head = {}, base = {}, checkRelease = passing, repos = REPOS, budgetLeft }) {
   return reviewSubmission({
@@ -213,6 +221,23 @@ test("a new id is merged automatically only under a name that is the author's", 
     assert.equal(result.merge, false, id);
     assert.match(result.markdown, /⏳/, id);
     assert.match(result.markdown, /passes the checks/, id);
+  }
+});
+
+test("a domain's proof counts for the repository it lists by id, not for one that has its name", async () => {
+  // newowner owns repository 102, newowner/hello. example.org's proof lists
+  // repository 101; example.com's names newowner/hello, as it might have
+  // when that name was someone else's.
+  for (const domain of ["example.org", "example.com"]) {
+    const id = `hello@${domain}`;
+    const path = `extensions/${slug(id)}.json`;
+    const result = await review({
+      author: "newowner",
+      files: [{ filename: path, status: "added" }],
+      head: { [path]: text({ id, repo: "newowner/hello", repoId: 102, publisherDomain: domain }) },
+    });
+    assert.equal(result.merge, false, domain);
+    assert.match(result.markdown, /does not list repository 102/, domain);
   }
 });
 

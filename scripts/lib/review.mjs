@@ -8,10 +8,11 @@
 // waits for a maintainer.
 //
 // A new id is merged automatically only when it is plainly the author's:
-// name@<their login>.github.io, or under a publisherDomain that verifies.
-// Otherwise anyone could list the id of a well-known plugin first and take
-// over every copy of it already installed, which would offer the listed
-// version as an update. Any other id waits for a maintainer.
+// name@<their login>.github.io, or under a publisherDomain whose proof lists
+// the listing's repository by id (see verify.mjs). Otherwise anyone could
+// list the id of a well-known plugin first and take over every copy of it
+// already installed, which would offer the listed version as an update. Any
+// other id waits for a maintainer.
 //
 // A listing is never deleted, even to delist an extension: its owner sets
 // "delisted": true instead. Every copy installed keeps asking the marketplace
@@ -70,12 +71,12 @@ function parse(text) {
  * callbacks reach out: `readHead` and `readBase` return a file's text in the
  * pull request and in the base branch (or null), `resolveRepo(repoId)` the
  * public repository with that numeric id ({ fullName, owner: { login, id,
- * type } }, or null), `verifyPublisher(listing)` checks its publisherDomain
- * ({ verified, problem }, see verify.mjs), and `checkRelease(listing)` checks
- * the newest release ({ ok, label, version, findings } or { ok: false,
- * problem }). `budgetLeft()` says whether GitHub's budget of requests allows
- * asking more; once it does not, the rest is left unchecked, for a later
- * push or a maintainer.
+ * type } }, or null), `verifyPublisher(listing)` checks that its
+ * publisherDomain's proof lists its repoId ({ verified, problem }, see
+ * verify.mjs), and `checkRelease(listing)` checks the newest release ({ ok,
+ * label, version, findings } or { ok: false, problem }). `budgetLeft()`
+ * says whether GitHub's budget of requests allows asking more; once it does
+ * not, the rest is left unchecked, for a later push or a maintainer.
  *
  * Returns whether to merge, and the Markdown for the pull request comment.
  * What is marked ❌ is for the author to fix; what is marked ⏳ is not wrong,
@@ -148,9 +149,11 @@ export async function reviewSubmission({
     }
     const own = listing.publisherDomain?.toLowerCase();
     if (own && (domain === own || domain.endsWith(`.${own}`))) {
+      // By repository id, not name: a name in the proof could since have been
+      // given up and registered by someone else, who would then match it.
       const proof = await verifyPublisher(listing);
       if (proof.verified) {
-        pass(`The id is under ${code(own)}, which is verified as the publisher of ${code(listing.repo)}.`);
+        pass(`The id is under ${code(own)}, whose proof lists repository ${listing.repoId} (${code(listing.repo)}).`);
       } else {
         wait(`The id is under ${code(own)}, but it did not verify (${code(proof.problem)}), so a maintainer will look at this.`);
       }
