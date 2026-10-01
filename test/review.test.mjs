@@ -136,11 +136,46 @@ test("an invalid listing is not merged", async () => {
   assert.match(noId.markdown, /"repoId" is required/);
 });
 
-test("owners may remove their own listing", async () => {
+test("a listing is never deleted: its owner delists it, and its id stays taken", async () => {
   const removed = await review({ files: [{ filename: PATH, status: "removed" }], base: { [PATH]: text() } });
-  assert.equal(removed.merge, true);
-  const byOther = await review({ author: "intruder", files: [{ filename: PATH, status: "removed" }], base: { [PATH]: text() } });
+  assert.equal(removed.merge, false);
+  assert.match(removed.markdown, /never deleted/);
+  const renamed = await review({
+    files: [{ filename: "extensions/hi@example.com.json", status: "renamed", previousFilename: PATH }],
+    base: { [PATH]: text() },
+  });
+  assert.equal(renamed.merge, false);
+
+  let asked = 0;
+  const delisted = await review({
+    files: [{ filename: PATH, status: "modified" }],
+    head: { [PATH]: text({ delisted: true }) },
+    base: { [PATH]: text() },
+    checkRelease: async () => {
+      asked++;
+      return passing();
+    },
+  });
+  assert.equal(delisted.merge, true);
+  assert.equal(asked, 0);
+  const byOther = await review({
+    author: "intruder",
+    files: [{ filename: PATH, status: "modified" }],
+    head: { [PATH]: text({ delisted: true }) },
+    base: { [PATH]: text() },
+  });
   assert.equal(byOther.merge, false);
+});
+
+test("claiming a delisted extension's id is a change to its listing, for a maintainer", async () => {
+  const result = await review({
+    author: "newowner",
+    files: [{ filename: PATH, status: "modified" }],
+    head: { [PATH]: text({ repo: "newowner/hello", repoId: 102 }) },
+    base: { [PATH]: text({ delisted: true }) },
+  });
+  assert.equal(result.merge, false);
+  assert.match(result.markdown, /changes the repository/);
 });
 
 test("a pull request touching more than ten files waits for a maintainer, unchecked", async () => {

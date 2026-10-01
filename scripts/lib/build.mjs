@@ -252,6 +252,11 @@ export async function buildRegistry({
       entry.problems.push(...errors);
       continue;
     }
+    // A delisted extension's listing stays only to keep its id taken.
+    if (listing.delisted === true) {
+      entry.problems.push("Delisted by its owner.");
+      continue;
+    }
     try {
       const extension = await buildExtension(listing, entry);
       if (extension) {

@@ -40,6 +40,7 @@ const FIELDS = {
   license: "optional",
   privacyPolicy: "optional",
   publisherDomain: "optional",
+  delisted: "optional",
 };
 
 /** A GitHub repository's full name, owner/name. */
@@ -118,6 +119,10 @@ export function validateListing(listing, { fileName } = {}) {
     (typeof publisherDomain !== "string" || !HOST.test(publisherDomain) || /^[\d.]+$/.test(publisherDomain))
   ) {
     errors.push('"publisherDomain" must be a domain name you control, such as "example.org".');
+  }
+
+  if (listing.delisted !== undefined && typeof listing.delisted !== "boolean") {
+    errors.push('"delisted" must be true or false.');
   }
 
   const { declares } = listing;

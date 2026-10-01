@@ -1,10 +1,17 @@
 // Deciding whether a pull request can be merged without a maintainer.
 //
-// That is what makes listing open: a pull request that only adds, changes or
-// removes listings, comes from the owner of every repository involved, and
-// whose listings pass the checks, is merged automatically. Anything else
-// (scripts, blocked.json, someone else's listing, a repository owned by an
-// organisation, a listing moved to another repository) waits for a maintainer.
+// That is what makes listing open: a pull request that only adds or changes
+// listings, comes from the owner of every repository involved, and whose
+// listings pass the checks, is merged automatically. Anything else (scripts,
+// blocked.json, someone else's listing, a repository owned by an
+// organisation, a listing moved to another repository, a listing deleted)
+// waits for a maintainer.
+//
+// A listing is never deleted, even to delist an extension: its owner sets
+// "delisted": true instead. Every copy installed keeps asking the marketplace
+// for updates under its id, so an id once listed must never be free for
+// someone else to list; with the file kept, a later claim to it is a change
+// to an existing listing, which a maintainer has to agree to.
 //
 // Ownership is decided by GitHub's numeric ids, never by names: a user or
 // repository name can be given up and registered again by someone else, an id
@@ -96,15 +103,13 @@ export async function reviewSubmission({ author, files, readHead, readBase, reso
     }
 
     if (file.status === "removed" || file.status === "renamed") {
-      const old = parse(await readBase(file.previousFilename || file.filename));
-      if (!old || typeof old !== "object") {
-        fail("The listing being removed cannot be read.");
-      } else {
-        await checkOwner(old, "removes");
-      }
-      if (file.status === "removed") {
-        continue;
-      }
+      wait('Listings are never deleted or renamed, so that no one else can take their id. To delist an extension, set `"delisted": true` in its listing; a maintainer will look at this.');
+      continue;
+    }
+    const isNew = file.status === "added" || file.status === "copied";
+    if (!isNew && file.status !== "modified" && file.status !== "changed") {
+      wait(`A maintainer will look at this change (${file.status}).`);
+      continue;
     }
 
     const listing = parse(await readHead(file.filename));
@@ -115,7 +120,7 @@ export async function reviewSubmission({ author, files, readHead, readBase, reso
     }
     pass("The listing is valid.");
 
-    if (file.status === "modified") {
+    if (!isNew) {
       // A listing's id and repository stay as first listed: moving it to
       // another repository hands its users' updates to whoever owns that one.
       const old = parse(await readBase(file.filename));
@@ -129,9 +134,13 @@ export async function reviewSubmission({ author, files, readHead, readBase, reso
         wait("This changes the repository (or the id) of a listing that already exists, which a maintainer has to confirm.");
       }
     }
-    await checkOwner(listing, file.status === "added" ? "adds" : "changes");
+    await checkOwner(listing, isNew ? "adds" : "changes");
     if (failures > failuresBefore) {
       lines.push("- The newest release is checked once the problems above are fixed.");
+      continue;
+    }
+    if (listing.delisted === true) {
+      pass("The extension is delisted: nothing of it is published, and the listing stays so that its id is never anyone else's.");
       continue;
     }
 

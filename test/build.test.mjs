@@ -80,6 +80,22 @@ test("blocked versions are not offered, and the block travels in the index", asy
   assert.equal(blockedReason({ x: { versionRanges: ["*"], reason: "r" } }, "x", "9"), "r");
 });
 
+test("a delisted extension is not published, and nothing is asked about it", async () => {
+  const out = outDir();
+  const { index, report } = await buildRegistry({
+    config,
+    listings: [{ file: "hello@example.com.json", listing: listing({ delisted: true }) }],
+    blocked: {},
+    candidates: async () => {
+      throw new Error("asked for releases");
+    },
+    out,
+  });
+  assert.equal(index.extensions.length, 0);
+  assert.deepEqual(report[0].problems, ["Delisted by its owner."]);
+  assert.equal(existsSync(join(out, "updates/hello@example.com.json")), false);
+});
+
 test("an extension blocked in every version is not even downloaded", async () => {
   const { index, report } = await buildRegistry({
     config,

@@ -76,6 +76,7 @@ for example
 | `license` | optional | An SPDX id, such as `MIT` or `AGPL-3.0-or-later`. |
 | `privacyPolicy` | optional | An `https://` page; expected when `declares.sendsContent` is true. |
 | `publisherDomain` | optional | A domain you control, to be shown as a verified publisher (below). |
+| `delisted` | optional | `true` to stop publishing the extension (below). |
 
 ## What is checked
 
@@ -120,6 +121,15 @@ Publish a new GitHub release. The marketplace looks for new releases every few
 hours, checks them, and offers the new version to everyone who has the
 extension. Newest first, the last five passing versions are kept; releases
 marked as pre-releases, and drafts, are skipped.
+
+## Delisting
+
+To take your extension out of the marketplace, set `"delisted": true` in its
+listing; a pull request that does only that, from the repository's owner, is
+merged automatically. Listings are never deleted: copies already installed go
+on asking the marketplace for updates under the extension's id, so an id
+once listed is never given to anyone else. A pull request that deletes or
+renames a listing waits for a maintainer.
 
 ## Blocking
 

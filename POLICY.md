@@ -112,5 +112,7 @@ to the user.
 If you think a block is wrong, open an issue in this repository. If the problem
 is fixed in a new version, the block can be narrowed to the old ones.
 
-To delist your own extension, open a pull request removing its listing. People
-who have it keep it, but it stops getting updates.
+To delist your own extension, open a pull request setting `"delisted": true` in
+its listing. People who have it keep it, but it stops getting updates. The
+listing itself stays, so that the extension's id is never given to anyone
+else.
