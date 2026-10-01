@@ -15,6 +15,7 @@ import { loadConfig } from "./lib/config.mjs";
 import { download, listReleases, repoById } from "./lib/github.mjs";
 import { inspectXpi } from "./lib/inspect.mjs";
 import { reviewSubmission } from "./lib/review.mjs";
+import { verifyPublisher } from "./lib/verify.mjs";
 
 const { GITHUB_TOKEN: token, GITHUB_REPOSITORY: registry, PR_NUMBER, HEAD_SHA, BASE_REF, GITHUB_OUTPUT } =
   process.env;
@@ -121,6 +122,7 @@ const review = await reviewSubmission({
   readHead: (path) => readFile(pr.head.repo.full_name, path, HEAD_SHA),
   readBase: (path) => readFile(registry, path, pr.base.sha),
   resolveRepo: (repoId) => repoById(repoId, { token }),
+  verifyPublisher,
   async checkRelease(listing) {
     let releases;
     try {

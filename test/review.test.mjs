@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { reviewSubmission } from "../scripts/lib/review.mjs";
+import { slug } from "../scripts/lib/config.mjs";
 import { listing } from "./helpers.mjs";
 
 const passing = async () => ({ ok: true, label: "v1.0.0", version: "1.0.0", findings: [] });
@@ -13,6 +14,12 @@ const REPOS = {
   201: { fullName: "acme/hello", owner: { login: "acme", id: 50, type: "Organization" } },
 };
 
+/** Only example.org serves a proof, and only for someone/hello. */
+const verifyPublisher = async (l) =>
+  l.publisherDomain === "example.org" && l.repo === "someone/hello"
+    ? { verified: true, domain: l.publisherDomain, problem: null }
+    : { verified: false, domain: l.publisherDomain, problem: "answered 404." };
+
 function review({ author = "someone", files, head = {}, base = {}, checkRelease = passing, repos = REPOS }) {
   return reviewSubmission({
     author: { login: author, id: USERS[author] },
@@ -20,12 +27,15 @@ function review({ author = "someone", files, head = {}, base = {}, checkRelease 
     readHead: async (path) => head[path] ?? null,
     readBase: async (path) => base[path] ?? null,
     resolveRepo: async (id) => repos[id] ?? null,
+    verifyPublisher,
     checkRelease,
   });
 }
 
-const PATH = "extensions/hello@example.com.json";
-const text = (overrides) => JSON.stringify(listing(overrides));
+// An id under the author's own github.io name, so new listings may merge.
+const ID = "hello@someone.github.io";
+const PATH = `extensions/${ID}.json`;
+const text = (overrides) => JSON.stringify(listing({ id: ID, ...overrides }));
 
 test("the owner adding a listing whose release passes is merged", async () => {
   const result = await review({ files: [{ filename: PATH, status: "added" }], head: { [PATH]: text() } });
@@ -176,6 +186,33 @@ test("claiming a delisted extension's id is a change to its listing, for a maint
   });
   assert.equal(result.merge, false);
   assert.match(result.markdown, /changes the repository/);
+});
+
+test("a new id is merged automatically only under a name that is the author's", async () => {
+  const add = (id, overrides = {}) =>
+    review({
+      files: [{ filename: `extensions/${slug(id)}.json`, status: "added" }],
+      head: { [`extensions/${slug(id)}.json`]: text({ id, ...overrides }) },
+    });
+  assert.equal((await add("hello@Someone.GitHub.io")).merge, true);
+  assert.equal((await add("hello@example.org", { publisherDomain: "example.org" })).merge, true);
+  assert.equal((await add("hello@tools.example.org", { publisherDomain: "example.org" })).merge, true);
+
+  // Someone else's plugin id, a domain that does not verify, a github.io name
+  // that is not the author's, and no domain at all: each waits, with the
+  // release still checked for the maintainer.
+  for (const [id, overrides] of [
+    ["better-bibtex@iris-advies.com", {}],
+    ["better-bibtex@iris-advies.com", { publisherDomain: "example.org" }],
+    ["hello@example.net", { publisherDomain: "example.net" }],
+    ["hello@intruder.github.io", {}],
+    ["{8c9d0a1e-1111-2222-3333-444455556666}", {}],
+  ]) {
+    const result = await add(id, overrides);
+    assert.equal(result.merge, false, id);
+    assert.match(result.markdown, /⏳/, id);
+    assert.match(result.markdown, /passes the checks/, id);
+  }
 });
 
 test("a pull request touching more than ten files waits for a maintainer, unchecked", async () => {

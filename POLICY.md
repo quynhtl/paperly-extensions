@@ -22,6 +22,10 @@ before they install it.
 - One listing per extension id. The id is the one in your `manifest.json`
   (`applications.zotero.id`) and cannot be changed later, and neither can the
   repository without a maintainer's agreement.
+- A new id is merged automatically only when it is under a name that is
+  yours: `@<your-login>.github.io`, or your verified publisher domain. Any
+  other id is listed by a maintainer once they know it is yours: listing an
+  existing plugin's id would hand you the updates of everyone who has it.
 
 ## 2. What you agree to
 

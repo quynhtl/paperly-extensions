@@ -32,7 +32,8 @@ extension that already passes the checks, and follow
 1. **Build it as a Paperly plugin**: an `.xpi` with a `manifest.json` and a
    `bootstrap.js`, the same format as a Zotero 7+ plugin. Its
    `applications.zotero` block needs an `id`, a `strict_min_version` and a
-   `strict_max_version`.
+   `strict_max_version`. Choose an id under a name that is yours, such as
+   `my-extension@<your-login>.github.io` (below).
 2. **Point its updates at the marketplace.** Set
    `applications.zotero.update_url` to
 
@@ -64,7 +65,7 @@ for example
 
 | Field | | |
 | --- | --- | --- |
-| `id` | required | The id in your `manifest.json`. |
+| `id` | required | The id in your `manifest.json`. A new listing is merged automatically only when its id ends in `@<your-login>.github.io`, or in `@` your `publisherDomain` or a subdomain of it, verified (below). Any other id waits for a maintainer, who checks that it is yours to list. |
 | `name` | required | Up to 50 characters. |
 | `description` | required | Up to 250 characters. |
 | `repo` | required | `owner/name` of the public GitHub repository with the releases. |
@@ -112,6 +113,10 @@ listing the repository named in your listing (any others too). The file is
 fetched again on every publish, without following redirects; taking it down
 takes the badge away. Extensions published from the marketplace's own GitHub
 account are marked official.
+
+A verified domain also lets a new listing whose id is under it, such as
+`my-extension@example.org` or `my-extension@tools.example.org` for
+`example.org`, be merged automatically.
 
 Verified says who publishes an extension. It doesn't say the extension is safe.
 

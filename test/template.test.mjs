@@ -16,7 +16,7 @@ test("the template builds, and passes the marketplace's checks with nothing to r
   const { name, data, manifest, warnings } = buildXpi(SRC);
   const id = manifest.applications.zotero.id;
   assert.equal(name, `${slug(id)}-${manifest.version}.xpi`);
-  assert.match(warnings[0], /still hello-paperly@example\.com/);
+  assert.match(warnings[0], /still hello-paperly@your-login\.github\.io/);
 
   const listing = { id, name: "Hello Paperly", description: "x", repo: "your-name/hello-paperly", declares: {} };
   const result = inspectXpi(data, { listing, config });

@@ -129,8 +129,10 @@ export function buildXpi(srcDir) {
   if (zotero.id && zotero.update_url !== updateURL) {
     problems.push(`"applications.zotero.update_url" must be ${updateURL}`);
   }
-  if (zotero.id?.endsWith("@example.com")) {
-    warnings.push(`The id is still ${zotero.id}. Choose your own (such as name@your-domain) before you publish: it can never change afterwards.`);
+  if (/@(?:your-login\.github\.io|example\.com)$/i.test(zotero.id ?? "")) {
+    warnings.push(
+      `The id is still ${zotero.id}. Choose your own, such as name@<your GitHub login>.github.io, before you publish: it can never change afterwards.`,
+    );
   }
   const files = listFiles(srcDir).map((path) => ({
     name: relative(srcDir, path).split(sep).join("/"),

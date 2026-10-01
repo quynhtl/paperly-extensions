@@ -7,6 +7,12 @@
 // organisation, a listing moved to another repository, a listing deleted)
 // waits for a maintainer.
 //
+// A new id is merged automatically only when it is plainly the author's:
+// name@<their login>.github.io, or under a publisherDomain that verifies.
+// Otherwise anyone could list the id of a well-known plugin first and take
+// over every copy of it already installed, which would offer the listed
+// version as an update. Any other id waits for a maintainer.
+//
 // A listing is never deleted, even to delist an extension: its owner sets
 // "delisted": true instead. Every copy installed keeps asking the marketplace
 // for updates under its id, so an id once listed must never be free for
@@ -40,17 +46,19 @@ function parse(text) {
 /**
  * `files` are the pull request's changed files ({ filename, status,
  * previousFilename }), and `author` who opened it ({ login, id }). The
- * callbacks reach GitHub: `readHead` and `readBase` return a file's text in
- * the pull request and in the base branch (or null), `resolveRepo(repoId)`
- * the public repository with that numeric id ({ fullName, owner: { login, id,
- * type } }, or null), and `checkRelease(listing)` checks the newest release
- * ({ ok, label, version, findings } or { ok: false, problem }).
+ * callbacks reach out: `readHead` and `readBase` return a file's text in the
+ * pull request and in the base branch (or null), `resolveRepo(repoId)` the
+ * public repository with that numeric id ({ fullName, owner: { login, id,
+ * type } }, or null), `verifyPublisher(listing)` checks its publisherDomain
+ * ({ verified, problem }, see verify.mjs), and `checkRelease(listing)` checks
+ * the newest release ({ ok, label, version, findings } or { ok: false,
+ * problem }).
  *
  * Returns whether to merge, and the Markdown for the pull request comment.
  * What is marked ❌ is for the author to fix; what is marked ⏳ is not wrong,
  * but is for a maintainer to decide.
  */
-export async function reviewSubmission({ author, files, readHead, readBase, resolveRepo, checkRelease }) {
+export async function reviewSubmission({ author, files, readHead, readBase, resolveRepo, verifyPublisher, checkRelease }) {
   const lines = [];
   let merge = files.length > 0;
   let failures = 0;
@@ -86,6 +94,29 @@ export async function reviewSubmission({ author, files, readHead, readBase, reso
     } else {
       pass(`@${author.login} ${verb} a listing for ${listing.repo}, which they own.`);
     }
+  }
+
+  async function checkNamespace(listing) {
+    const at = listing.id.lastIndexOf("@");
+    const domain = at > 0 ? listing.id.slice(at + 1).toLowerCase() : "";
+    const pages = `${author.login.toLowerCase()}.github.io`;
+    if (domain === pages) {
+      pass(`The id is under ${pages}, which is @${author.login}'s.`);
+      return;
+    }
+    const own = listing.publisherDomain?.toLowerCase();
+    if (own && (domain === own || domain.endsWith(`.${own}`))) {
+      const proof = await verifyPublisher(listing);
+      if (proof.verified) {
+        pass(`The id is under ${own}, which is verified as the publisher of ${listing.repo}.`);
+      } else {
+        wait(`The id is under ${own}, but ${own} did not verify (${proof.problem}), so a maintainer will look at this.`);
+      }
+      return;
+    }
+    wait(
+      `A new id is merged automatically only when it is yours: name@${pages}, or name@ your verified publisherDomain. A maintainer will look at this one.`,
+    );
   }
 
   if (files.length > MAX_FILES) {
@@ -135,6 +166,9 @@ export async function reviewSubmission({ author, files, readHead, readBase, reso
       }
     }
     await checkOwner(listing, isNew ? "adds" : "changes");
+    if (isNew && failures === failuresBefore) {
+      await checkNamespace(listing);
+    }
     if (failures > failuresBefore) {
       lines.push("- The newest release is checked once the problems above are fixed.");
       continue;
