@@ -150,7 +150,8 @@ const ICON_TYPES = { png: "image/png", svg: "image/svg+xml", jpg: "image/jpeg", 
  * CSS, in a <style> or in any attribute, fetches through more than url():
  * @import and image-set() take a plain string, as src() does where CSS
  * now specifies it, and an escape spells any name, so "u\72l(" is url().
- * Those are refused, and so is every backslash.
+ * Those are refused, and so is every backslash. A name can also be split by
+ * markup, which styleHoldsMarkup below refuses.
  *
  * The icon is anyone's text, so no pattern here may go back over it: each
  * must cost time in proportion to the text, or be bounded, like
@@ -208,6 +209,26 @@ const SVG_ELEMENTS = new Set([
 
 const UTF8 = new TextDecoder("utf-8", { fatal: true });
 
+/**
+ * Whether a <style> holds anything but text. Its stylesheet is its Text
+ * children joined, with any comment or element between them left out, so
+ * "@imp<!---->ort" or "ur<g/>l(" reaches CSS as @import or url( though the
+ * patterns above never see either written. A <style> may hold text only:
+ * the first "<" after its start must be an end tag (so an empty <style/>
+ * before another element is refused too, which no drawing needs). XML that
+ * parses allows no "<" in an attribute's value, so that "<" is past the
+ * start tag; and each stretch of text between two "<" is gone over once.
+ */
+function styleHoldsMarkup(text) {
+  for (const m of text.matchAll(/<(?:[\w.-]+:)?style\b/gi)) {
+    const next = text.indexOf("<", m.index + 1);
+    if (next < 0 || text[next + 1] !== "/") {
+      return true;
+    }
+  }
+  return false;
+}
+
 function unsafeSVG(data) {
   let text;
   try {
@@ -223,7 +244,7 @@ function unsafeSVG(data) {
   if (/\bencoding\s*=\s*["'](?!utf-8["'])/i.test(declaration) || text.includes("<?", declaration.length)) {
     return true;
   }
-  if (SVG_UNSAFE.some((p) => p.test(text))) {
+  if (SVG_UNSAFE.some((p) => p.test(text)) || styleHoldsMarkup(text)) {
     return true;
   }
   // Every element's name, with any namespace prefix left off. With no

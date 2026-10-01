@@ -123,6 +123,12 @@ test("an SVG icon that is more than a picture is not shown", () => {
     '<svg xmlns="http://www.w3.org/2000/svg"><rect style="background-image:src(\'https://evil.example/p.png\')"/></svg>',
     '<svg xmlns="http://www.w3.org/2000/svg"><style>@\\69mport "https://evil.example/a.css";</style></svg>',
     '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="u\\72l(https://evil.example/p.svg#a)"/></svg>',
+    // A name split by a comment or an element, which the stylesheet leaves out.
+    '<svg xmlns="http://www.w3.org/2000/svg"><style>@imp<!---->ort "https://evil.example/a.css";</style></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><style>rect { fill: ur<!---->l(https://evil.example/p.svg#a) }</style><rect width="9" height="9"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><style>rect { background-image: image-s<!---->et("https://evil.example/p.png" 1x) }</style><rect/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><style>@imp<g/>ort "https://evil.example/a.css";</style></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:s="http://www.w3.org/2000/svg"><s:style media="a>b">rect { fill: ur<s:title>x</s:title>l(https://evil.example/p.svg#a) }</s:style><rect/></svg>',
   ];
   for (const svg of unsafe) {
     const result = withIcon(svg);
@@ -132,6 +138,7 @@ test("an SVG icon that is more than a picture is not shown", () => {
   }
   const safe = [
     '<svg xmlns="http://www.w3.org/2000/svg"><defs><path id="p" d="M0 0h9"/></defs><use href = "#p"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><style type="text/css">rect { fill: #c00 } /* red */</style><rect width="9" height="9"/></svg>',
     [
       '<?xml version="1.0" encoding="UTF-8" standalone="no"?>',
       "<!-- Generator: a drawing program -->",
