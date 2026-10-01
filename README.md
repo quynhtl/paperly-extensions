@@ -72,7 +72,7 @@ for example
 | `repoId` | required | That repository's numeric id. It stays with the repository when it or its owner is renamed, so the listing can never point at someone else who takes the old name. `node scripts/check.mjs --repo-id owner/name` prints it, and so does `https://api.github.com/repos/owner/name` (its `"id"`). |
 | `declares` | required | What the extension does, see [POLICY.md](POLICY.md#4-what-you-must-declare). `{}` if none of it. |
 | `publisher` | optional | The name people see. Defaults to the repository owner. |
-| `categories` | optional | Any of `ai`, `reading`, `writing`, `citations`, `notes`, `organization`, `import-export`, `appearance`, `integration`, `other`. |
+| `categories` | optional | Up to three of `ai`, `reading`, `writing`, `citations`, `notes`, `organization`, `import-export`, `appearance`, `integration`, `other`. |
 | `homepage` | optional | An `https://` page about the extension. |
 | `license` | optional | An SPDX id, such as `MIT` or `AGPL-3.0-or-later`. |
 | `privacyPolicy` | optional | An `https://` page; expected when `declares.sendsContent` is true. |
@@ -88,7 +88,7 @@ Every version, before it is published
 | --- | --- | --- |
 | not a readable `.xpi`, or over 20 MB | code that reads cookies, passwords or keys, starts programs, uses the clipboard or writes files without the listing declaring it | web addresses in the code that the listing doesn't declare |
 | `manifest.json` missing, invalid, or not `manifest_version` 2 | a version that doesn't run in the current Paperly | code built from text while running (`eval`, `new Function`) |
-| | | an SVG icon with scripts, event handlers, HTML or links, which is then not shown |
+| a file of code over 8 MB, too large to check | | an SVG icon with scripts, event handlers, HTML or links, which is then not shown |
 | an id other than the listing's | `sendsContent` without a `privacyPolicy` | |
 | an `update_url` other than the marketplace's | | |
 | no `strict_min_version`/`strict_max_version`, or no `bootstrap.js` | | |
@@ -167,7 +167,7 @@ reads (see [scripts/lib/build.mjs](scripts/lib/build.mjs)):
 | `index.json.sig` | ECDSA P-256 signature of `index.json`. Paperly refuses an index it cannot verify. |
 | `files/<id>/<id>-<version>.xpi` | The checked copy of each version, which is what people install. |
 | `updates/<id>.json` | The update manifest each extension's `update_url` points at. |
-| `icons/<id>.png` | Taken from the newest version's `manifest.json` icons. |
+| `icons/<id>.png`, `.svg` or `.jpg` | The newest version's icon from its `manifest.json` (the smallest of 64px or more, else the largest), in its own format. |
 | `report.json` | What was accepted and rejected, and why. |
 
 To try an extension in a local marketplace before releasing it, first write
