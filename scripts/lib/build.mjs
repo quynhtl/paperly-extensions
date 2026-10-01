@@ -101,6 +101,11 @@ function discard(out, id) {
  * One extension can never stop the build: whatever goes wrong with it is
  * written in the report, and it is left out. Otherwise one bad release would
  * hold back every other extension's updates, and blocked.json with them.
+ *
+ * The exception is an error marked `fatal`, such as GitHub not answering:
+ * that is not about one extension, and building on regardless would publish
+ * a marketplace missing the ones GitHub did not answer for. It is thrown, so
+ * that nothing is deployed and the site already up stays up.
  */
 export async function buildRegistry({
   config,
@@ -131,6 +136,9 @@ export async function buildRegistry({
     try {
       releases = await candidates(listing);
     } catch (e) {
+      if (e?.fatal) {
+        throw e;
+      }
       entry.problems.push(e.message);
       return null;
     }
@@ -251,6 +259,9 @@ export async function buildRegistry({
         entry.listed = true;
       }
     } catch (e) {
+      if (e?.fatal) {
+        throw e;
+      }
       entry.problems.push(`The extension could not be built: ${e?.message ?? e}`);
       entry.versions = [];
       discard(out, listing.id);

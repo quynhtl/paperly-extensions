@@ -5,7 +5,9 @@
 //   node scripts/build.mjs --out dist
 //       Every listing, from its GitHub releases. Signs with the private key in
 //       $REGISTRY_SIGNING_KEY, or the file given with --key-file. Set
-//       $GITHUB_TOKEN to avoid GitHub's limit on anonymous requests.
+//       $GITHUB_TOKEN to avoid GitHub's limit on anonymous requests. Exits 1,
+//       having built nothing to deploy, if GitHub cannot be asked about
+//       every listing.
 //
 //   node scripts/build.mjs --out dist --base-url http://127.0.0.1:8765/ \
 //       --key-file dev.key --local hello@example.com=build/hello.xpi
@@ -86,7 +88,7 @@ async function candidates(listing) {
       },
     ];
   }
-  const releases = await listReleases(listing.repo, { token: process.env.GITHUB_TOKEN });
+  const releases = await listReleases(listing.repo, { token: process.env.GITHUB_TOKEN, want: config.versionsKept });
   return releases.map((r) => ({
     label: r.tag,
     released: r.released,
@@ -100,14 +102,23 @@ async function candidates(listing) {
   }));
 }
 
-const { report } = await buildRegistry({
-  config,
-  listings,
-  blocked,
-  candidates,
-  out: values.out,
-  signingKey,
-});
+let report;
+try {
+  ({ report } = await buildRegistry({
+    config,
+    listings,
+    blocked,
+    candidates,
+    out: values.out,
+    signingKey,
+  }));
+} catch (e) {
+  if (!e?.fatal) {
+    throw e;
+  }
+  console.error(`${e.message}\nThe build stopped: nothing is deployed, and the site that is up stays up.`);
+  process.exit(1);
+}
 
 let listed = 0;
 for (const entry of report) {

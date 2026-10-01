@@ -9,6 +9,12 @@ import { repoOwner, validateListing } from "./listing.mjs";
 
 const LISTING_PATH = /^extensions\/[^/]+\.json$/;
 
+/**
+ * Every listing costs a few GitHub requests, from a budget the publish runs
+ * share; a pull request touching more is left to a maintainer.
+ */
+const MAX_FILES = 10;
+
 function parse(text) {
   try {
     return JSON.parse(text);
@@ -30,10 +36,12 @@ function parse(text) {
 export async function reviewSubmission({ author, files, readHead, readBase, ownerAllows, checkRelease }) {
   const lines = [];
   let merge = files.length > 0;
+  let failures = 0;
   const pass = (text) => lines.push(`- ✅ ${text}`);
   const fail = (text) => {
     lines.push(`- ❌ ${text}`);
     merge = false;
+    failures++;
   };
 
   async function checkOwner(listing, verb) {
@@ -45,7 +53,14 @@ export async function reviewSubmission({ author, files, readHead, readBase, owne
     }
   }
 
+  if (files.length > MAX_FILES) {
+    lines.push("");
+    fail(`This pull request changes ${files.length} files. One that changes more than ${MAX_FILES} is not checked automatically: split it up, or wait for a maintainer.`);
+    files = [];
+  }
+
   for (const file of files) {
+    const failuresBefore = failures;
     lines.push("", `**${file.filename}**, ${file.status}`);
     if (!LISTING_PATH.test(file.filename) || (file.previousFilename && !LISTING_PATH.test(file.previousFilename))) {
       fail("Only listings in `extensions/` are merged automatically; a maintainer will review this change.");
@@ -79,6 +94,10 @@ export async function reviewSubmission({ author, files, readHead, readBase, owne
       }
     }
     await checkOwner(listing, file.status === "added" ? "adds" : "changes");
+    if (failures > failuresBefore) {
+      lines.push("- The newest release is checked once the problems above are fixed.");
+      continue;
+    }
 
     const release = await checkRelease(listing);
     if (!release.ok) {

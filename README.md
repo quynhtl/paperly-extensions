@@ -115,7 +115,8 @@ Verified says who publishes an extension. It doesn't say the extension is safe.
 
 Publish a new GitHub release. The marketplace looks for new releases every few
 hours, checks them, and offers the new version to everyone who has the
-extension. Newest first, the last five passing versions are kept.
+extension. Newest first, the last five passing versions are kept; releases
+marked as pre-releases, and drafts, are skipped.
 
 ## Blocking
 
@@ -171,7 +172,7 @@ otherwise the add-on manager installs the extension but keeps it disabled.
 | Workflow | When | What |
 | --- | --- | --- |
 | [listing.yml](.github/workflows/listing.yml) | A pull request touches `extensions/` | Checks the listings and the newest release of each, comments with the result, and merges when everything passes and the author owns every repository involved ([scripts/lib/review.mjs](scripts/lib/review.mjs)). Anything else waits for a maintainer. |
-| [publish.yml](.github/workflows/publish.yml) | Push to `main`, every three hours, or by hand | Builds, signs and deploys the site to GitHub Pages. |
+| [publish.yml](.github/workflows/publish.yml) | Push to `main`, every three hours, or by hand | Builds, signs and deploys the site to GitHub Pages. If GitHub cannot be asked about every listing, nothing is deployed and the site already up stays up. |
 | [test.yml](.github/workflows/test.yml) | Every pull request and push | `npm test` and every listing. |
 
 `listing.yml` holds a token that can write to this repository, so it runs only

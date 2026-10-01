@@ -88,3 +88,34 @@ test("owners may remove their own listing", async () => {
   const byOther = await review({ author: "other", files: [{ filename: PATH, status: "removed" }], base: { [PATH]: text() } });
   assert.equal(byOther.merge, false);
 });
+
+test("a pull request touching more than ten files waits for a maintainer, unchecked", async () => {
+  let asked = 0;
+  const files = Array.from({ length: 11 }, (_, i) => ({ filename: `extensions/e${i}@example.com.json`, status: "added" }));
+  const result = await review({
+    files,
+    checkRelease: async () => {
+      asked++;
+      return passing();
+    },
+  });
+  assert.equal(result.merge, false);
+  assert.match(result.markdown, /changes 11 files/);
+  assert.equal(asked, 0);
+});
+
+test("the release of a listing that already failed is not checked", async () => {
+  let asked = 0;
+  const result = await review({
+    author: "intruder",
+    files: [{ filename: PATH, status: "added" }],
+    head: { [PATH]: text() },
+    checkRelease: async () => {
+      asked++;
+      return passing();
+    },
+  });
+  assert.equal(result.merge, false);
+  assert.equal(asked, 0);
+  assert.match(result.markdown, /checked once the problems above are fixed/);
+});

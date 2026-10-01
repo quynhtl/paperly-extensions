@@ -168,6 +168,23 @@ test("one extension that breaks the build leaves the others listed", async () =>
   assert.equal(blockedReason({}, "constructor", "1.0"), null);
 });
 
+test("when GitHub cannot be asked, the build stops instead of publishing less", async () => {
+  const unanswered = new Error("GitHub answered 502 for /repos/someone/hello/releases");
+  unanswered.fatal = true;
+  await assert.rejects(
+    buildRegistry({
+      config,
+      listings: [{ file: "hello@example.com.json", listing: listing() }],
+      blocked: {},
+      candidates: async () => {
+        throw unanswered;
+      },
+      out: outDir(),
+    }),
+    unanswered,
+  );
+});
+
 test("blocked.json is checked", () => {
   assert.deepEqual(validateBlocked({}), []);
   assert.equal(validateBlocked({ x: { versionRanges: [], reason: "" } }).length, 2);
