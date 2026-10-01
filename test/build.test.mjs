@@ -205,6 +205,8 @@ test("blocked.json is checked", () => {
   assert.deepEqual(validateBlocked({}), []);
   assert.equal(validateBlocked({ x: { versionRanges: [], reason: "" } }).length, 2);
   assert.equal(validateBlocked([]).length, 1);
+  assert.deepEqual(validateBlocked({ x: { versionRanges: ["*"], reason: "Malware.", global: true } }), []);
+  assert.match(validateBlocked({ x: { versionRanges: ["*"], reason: "Malware.", global: "yes" } })[0], /"global" must be/);
 });
 
 test("the public key can be recovered from the private key", async () => {

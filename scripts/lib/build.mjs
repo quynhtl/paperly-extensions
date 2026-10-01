@@ -16,7 +16,14 @@ import { compareVersions } from "./version.mjs";
 
 const ICON_EXTENSIONS = { "image/png": "png", "image/svg+xml": "svg", "image/jpeg": "jpg" };
 
-/** Problems with blocked.json, which uses the format of Zotero's own blocked-plugin list. */
+/**
+ * Problems with blocked.json, which uses the format of Zotero's own
+ * blocked-plugin list, plus one field: `"global": true`. Paperly applies a
+ * block only to copies installed from the marketplace, so that a block aimed
+ * at a listing cannot switch off a different plugin that shares its id; a
+ * global block applies to every copy, for an id known to be malicious
+ * wherever it comes from.
+ */
 export function validateBlocked(blocked) {
   const errors = [];
   if (!blocked || typeof blocked !== "object" || Array.isArray(blocked)) {
@@ -32,6 +39,9 @@ export function validateBlocked(blocked) {
       (r && typeof r === "object" && (typeof r.minVersion === "string" || typeof r.maxVersion === "string"));
     if (!Array.isArray(ranges) || !ranges.length || !ranges.every(rangeOK)) {
       errors.push(`${id}: "versionRanges" must list "*", versions, or { minVersion, maxVersion } objects.`);
+    }
+    if (entry?.global !== undefined && typeof entry.global !== "boolean") {
+      errors.push(`${id}: "global" must be true or false.`);
     }
   }
   return errors;

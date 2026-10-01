@@ -111,7 +111,8 @@ The maintainers can block any extension, or any range of its versions, at any
 time: for malware, for a broken security promise, for breaking these rules, or
 because the law requires it. A block switches the extension off on every
 computer the next time Paperly checks the marketplace, and the reason is shown
-to the user.
+to the user. It applies to copies installed from the marketplace, and to every
+copy of the id when the maintainers mark it global (see the README).
 
 If you think a block is wrong, open an issue in this repository. If the problem
 is fixed in a new version, the block can be narrowed to the old ones.

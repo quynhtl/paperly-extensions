@@ -156,6 +156,13 @@ and/or `maxVersion`. Paperly switches blocked versions off on every computer
 the next time it reads the index, and shows the reason. Only maintainers
 change this file.
 
+A block applies to the copies installed from the marketplace, whose
+`update_url` is the marketplace's. A plugin with the same id installed some
+other way is left alone, so that a block aimed at a listing never switches
+off a different plugin that happens to share its id. For an id known to be
+malicious wherever it comes from, add `"global": true` to its entry, and the
+block applies to every copy.
+
 ## What gets published
 
 `node scripts/build.mjs --out dist` turns the listings into the site Paperly
