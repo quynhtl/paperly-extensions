@@ -199,6 +199,28 @@ test("when GitHub cannot be asked, the build stops instead of publishing less", 
     }),
     unanswered,
   );
+
+  // The same when the newest release cannot be downloaded: publishing the
+  // older ones alone would hold back what may be a security fix.
+  const undownloaded = new Error("The download was answered 502 for https://example.com/v1.1.0.xpi");
+  undownloaded.fatal = true;
+  await assert.rejects(
+    buildRegistry({
+      config,
+      listings: [{ file: "hello@example.com.json", listing: listing() }],
+      blocked: {},
+      candidates: async () => [
+        release("v1.1.0", null, {
+          load: async () => {
+            throw undownloaded;
+          },
+        }),
+        release("v1.0.0", xpiAt("1.0.0")),
+      ],
+      out: outDir(),
+    }),
+    undownloaded,
+  );
 });
 
 test("blocked.json is checked", () => {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GitHubError, listReleases, repoById } from "../scripts/lib/github.mjs";
+import { download, GitHubError, listReleases, repoById } from "../scripts/lib/github.mjs";
 
 const release = (tag, extra = {}) => ({
   tag_name: tag,
@@ -99,4 +99,64 @@ test("repositories and their releases are found by numeric id", async () => {
   assert.equal(await repoById(102, { fetch }), null);
   assert.deepEqual((await listReleases(101, { fetch })).map((r) => r.tag), ["v1.0.0"]);
   assert.match(urls[0], /^https:\/\/api\.github\.com\/repositories\/101$/);
+});
+
+/** A body that sends `first`, then nothing more until the request is aborted. */
+function stalling(signal, first) {
+  return new ReadableStream({
+    start(controller) {
+      if (first) {
+        controller.enqueue(new TextEncoder().encode(first));
+      }
+      signal.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")));
+    },
+  });
+}
+
+test("a download the host fails, drops or stalls is asked again", async () => {
+  const waits = [];
+  const answers = [
+    () => new Response("", { status: 502 }),
+    () => {
+      throw new TypeError("fetch failed");
+    },
+    (signal) => new Response(stalling(signal, "PK")),
+    () => new Response("xpi bytes"),
+  ];
+  let n = 0;
+  const fetch = async (url, { signal }) => answers[n++](signal);
+  const data = await download("https://example.com/a.xpi", {
+    fetch,
+    maxBytes: 100,
+    idleMs: 10,
+    wait: async (ms) => waits.push(ms),
+  });
+  assert.equal(data.toString(), "xpi bytes");
+  assert.deepEqual(waits, [1000, 2000, 4000]);
+});
+
+test("a download the host keeps failing stops the build", async () => {
+  for (const answer of [() => new Response("", { status: 503 }), () => new Response("", { status: 429 })]) {
+    await assert.rejects(
+      download("https://example.com/a.xpi", { fetch: async () => answer(), maxBytes: 100, wait: noWait }),
+      (e) => e instanceof GitHubError && e.fatal && /answered (503|429)/.test(e.message),
+    );
+  }
+  const stalled = async (url, { signal }) => new Response(stalling(signal));
+  await assert.rejects(
+    download("https://example.com/a.xpi", { fetch: stalled, maxBytes: 100, idleMs: 10, wait: noWait }),
+    (e) => e instanceof GitHubError && /timed out/.test(e.message),
+  );
+});
+
+test("what is wrong with the release itself only rejects that release", async () => {
+  let asked = 0;
+  const gone = async () => {
+    asked++;
+    return new Response("Not Found", { status: 404 });
+  };
+  await assert.rejects(download("https://example.com/a.xpi", { fetch: gone, maxBytes: 100, wait: noWait }), (e) => !e.fatal && /404/.test(e.message));
+  assert.equal(asked, 1);
+  const large = async () => new Response("x".repeat(200));
+  await assert.rejects(download("https://example.com/a.xpi", { fetch: large, maxBytes: 100, wait: noWait }), (e) => !e.fatal && /larger than 100/.test(e.message));
 });

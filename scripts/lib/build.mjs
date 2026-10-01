@@ -168,6 +168,12 @@ export async function buildRegistry({
       try {
         data = await release.load();
       } catch (e) {
+        // GitHub not answering for the download is no fault of the release
+        // (see download() in github.mjs): leaving the release out would
+        // publish less, so the build stops.
+        if (e?.fatal) {
+          throw e;
+        }
         reject(e.message);
         continue;
       }

@@ -3,15 +3,24 @@
 //
 // The build takes GitHub's word on every listing at once, so a failure is
 // never mistaken for an answer. What GitHub may answer later (a 5xx, a 429, a
-// rate limit) is asked again after a pause; whatever is still unanswered
-// throws a GitHubError, which stops the build, so that the site already up
-// stays up rather than one missing the extensions GitHub did not answer for.
-// Only a repository that is gone is an answer: it lists nothing.
+// rate limit, a dropped or stalled download) is asked again after a pause;
+// whatever is still unanswered throws a GitHubError, which stops the build,
+// so that the site already up stays up rather than one missing the
+// extensions, or the versions, GitHub did not answer for. Only a repository
+// that is gone is an answer: it lists nothing.
 
 const API = "https://api.github.com";
 const RETRIES = 3;
 const MAX_WAIT_MS = 60 * 1000;
 const PAGE = 100;
+
+/**
+ * A download is given up on when nothing arrives for this long, or when the
+ * whole takes longer than that, and asked again; a connection that stalls
+ * would otherwise hold the build until the job's time limit.
+ */
+const DOWNLOAD_IDLE_MS = 20 * 1000;
+const DOWNLOAD_TOTAL_MS = 5 * 60 * 1000;
 
 /**
  * 404 is a repository that was deleted or made private; 451 one blocked for
@@ -188,23 +197,92 @@ export async function listReleases(repoId, { token, fetch, wait, want = 1, maxPa
 }
 
 /**
+ * One try at a download: { data }, or { why } when the host did not answer
+ * and asking again may help. What is wrong with the release itself throws.
+ */
+async function downloadOnce(url, { fetch, maxBytes, idleMs, totalMs }) {
+  const controller = new AbortController();
+  const deadline = Date.now() + totalMs;
+  let timer;
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => controller.abort(), Math.max(0, Math.min(idleMs, deadline - Date.now())));
+  };
+  const unanswered = (e) => ({
+    why: controller.signal.aborted ? "The download timed out" : `The download failed (${e?.message ?? e})`,
+  });
+  arm();
+  try {
+    let response;
+    try {
+      response = await fetch(url, {
+        headers: { "User-Agent": "paperly-extensions" },
+        redirect: "follow",
+        signal: controller.signal,
+      });
+    } catch (e) {
+      return unanswered(e);
+    }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      if (response.status === 429 || response.status >= 500) {
+        return { why: `The download was answered ${response.status}` };
+      }
+      // A 404, say, for an asset deleted from the release.
+      throw new Error(`Download failed: ${response.status}`);
+    }
+    const reader = response.body?.getReader();
+    const chunks = [];
+    let total = 0;
+    while (reader) {
+      let next;
+      try {
+        next = await reader.read();
+      } catch (e) {
+        return unanswered(e);
+      }
+      if (next.done) {
+        break;
+      }
+      arm();
+      total += next.value.length;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error(`The file is larger than ${maxBytes} bytes`);
+      }
+      chunks.push(next.value);
+    }
+    return { data: Buffer.concat(chunks) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Downloads at most `maxBytes`, whatever the server claims. No token: release
  * assets of a public repository need none, and the download is redirected to
  * another host that should not see one.
+ *
+ * The host that serves release assets can fail for a while like the API, and
+ * is treated the same: a 5xx, a 429, a dropped connection or a stall is asked
+ * again after a pause, and if it persists throws a GitHubError, which stops
+ * the build. Taken for a fault of the release, a moment's failure would
+ * publish the extension without its newest version, or not at all. A plain
+ * Error is something wrong with the release (an asset that is gone, a file
+ * over the limit), which rejects that release only.
  */
-export async function download(url, { fetch = globalThis.fetch, maxBytes }) {
-  const response = await fetch(url, { headers: { "User-Agent": "paperly-extensions" }, redirect: "follow" });
-  if (!response.ok) {
-    throw new Error(`Download failed: ${response.status}`);
-  }
-  const chunks = [];
-  let total = 0;
-  for await (const chunk of response.body) {
-    total += chunk.length;
-    if (total > maxBytes) {
-      throw new Error(`The file is larger than ${maxBytes} bytes`);
+export async function download(
+  url,
+  { fetch = globalThis.fetch, wait = pause, maxBytes, idleMs = DOWNLOAD_IDLE_MS, totalMs = DOWNLOAD_TOTAL_MS },
+) {
+  for (let attempt = 0; ; attempt++) {
+    const { data, why } = await downloadOnce(url, { fetch, maxBytes, idleMs, totalMs });
+    if (data) {
+      return data;
     }
-    chunks.push(chunk);
+    if (attempt >= RETRIES) {
+      throw new GitHubError(`${why} for ${url}`);
+    }
+    await wait(1000 * 2 ** attempt);
   }
-  return Buffer.concat(chunks);
 }

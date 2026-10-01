@@ -7,7 +7,7 @@
 //       $REGISTRY_SIGNING_KEY, or the file given with --key-file. Set
 //       $GITHUB_TOKEN to avoid GitHub's limit on anonymous requests. Exits 1,
 //       having built nothing to deploy, if GitHub cannot be asked about
-//       every listing.
+//       every listing, or a release cannot be downloaded from it.
 //
 //   node scripts/build.mjs --out dist --base-url http://127.0.0.1:8765/ \
 //       --key-file dev.key --local hello@example.com=build/hello.xpi

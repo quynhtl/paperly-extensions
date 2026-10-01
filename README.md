@@ -209,7 +209,7 @@ marketplace is refused by the real one, so release one built without
 | Workflow | When | What |
 | --- | --- | --- |
 | [listing.yml](.github/workflows/listing.yml) | A pull request touches `extensions/` | Checks the listings and the newest release of each, comments with the result, and merges when everything passes and the author owns every repository involved, going by GitHub's numeric ids rather than names ([scripts/lib/review.mjs](scripts/lib/review.mjs)). Anything else waits for a maintainer, including a repository owned by an organisation, and a listing moved to another repository. |
-| [publish.yml](.github/workflows/publish.yml) | Push to `main`, every three hours, or by hand | Builds, signs and deploys the site to GitHub Pages. If GitHub cannot be asked about every listing, nothing is deployed and the site already up stays up. |
+| [publish.yml](.github/workflows/publish.yml) | Push to `main`, every three hours, or by hand | Builds, signs and deploys the site to GitHub Pages. If GitHub cannot be asked about every listing, or a release cannot be downloaded from it, nothing is deployed and the site already up stays up. |
 | [test.yml](.github/workflows/test.yml) | Every pull request and push | `npm test` and every listing. |
 
 `listing.yml` holds a token that can write to this repository, so it runs only
