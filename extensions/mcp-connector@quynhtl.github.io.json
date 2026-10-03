@@ -1,0 +1,18 @@
+{
+  "id": "mcp-connector@quynhtl.github.io",
+  "name": "MCP Connector",
+  "publisher": "quynhtl",
+  "description": "Connects Paperly to MCP servers: add a server once by its URL, then run its tools on text you select in a PDF. Talks only to the servers you add.",
+  "repo": "quynhtl/paperly-mcp-connector",
+  "repoId": 1403123091,
+  "homepage": "https://github.com/quynhtl/paperly-mcp-connector#readme",
+  "license": "MIT",
+  "privacyPolicy": "https://github.com/quynhtl/paperly-mcp-connector#privacy",
+  "categories": [
+    "integration",
+    "ai"
+  ],
+  "declares": {
+    "sendsContent": true
+  }
+}
