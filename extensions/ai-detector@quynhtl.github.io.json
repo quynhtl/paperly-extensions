@@ -1,0 +1,21 @@
+{
+  "id": "ai-detector@quynhtl.github.io",
+  "name": "AI Detector",
+  "publisher": "quynhtl",
+  "description": "Checks how much of a passage reads as AI-written, with the community QuillBot AI Detector actor on Apify. Not made by or affiliated with QuillBot.",
+  "repo": "quynhtl/paperly-ai-detector",
+  "repoId": 1403046183,
+  "homepage": "https://github.com/quynhtl/paperly-ai-detector#readme",
+  "license": "MIT",
+  "privacyPolicy": "https://github.com/quynhtl/paperly-ai-detector#privacy",
+  "categories": [
+    "ai",
+    "writing"
+  ],
+  "declares": {
+    "network": [
+      "api.apify.com"
+    ],
+    "sendsContent": true
+  }
+}
